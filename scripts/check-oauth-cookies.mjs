@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+const origin='http://localhost:3000';
+const response=await fetch(`${origin}/auth/sign-in`,{method:'POST',headers:{Origin:origin},redirect:'manual'});
+assert.equal(response.status,303);
+const location=new URL(response.headers.get('location'));
+assert.equal(location.pathname,'/auth/v1/authorize');
+assert(location.searchParams.get('code_challenge'));
+const cookies=response.headers.getSetCookie();
+assert(cookies.some(cookie=>cookie.includes('code-verifier')),'Sign-in must set its verifier cookie on the redirect.');
+assert.equal(response.headers.get('cache-control'),'no-store');
+const callback=await fetch(`${origin}/auth/callback?code=00000000-0000-4000-8000-000000000000`,{redirect:'manual'});
+assert.equal(new URL(callback.headers.get('location')).searchParams.get('error'),'pkce_code_verifier_not_found');
+const rejected=await fetch(`${origin}/auth/sign-in`,{method:'POST',headers:{Origin:'https://untrusted.example'},redirect:'manual'});
+assert.equal(new URL(rejected.headers.get('location')).searchParams.get('error'),'origin_mismatch');
+console.log('PASS: OAuth start sets a PKCE verifier cookie, sends its challenge, rejects wrong origins, and identifies missing callback cookies. No Google sign-in was performed.');

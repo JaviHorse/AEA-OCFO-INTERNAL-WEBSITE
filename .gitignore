@@ -1,0 +1,12 @@
+node_modules/
+.next/
+.env*
+!.env.example
+GDrive_key*.json
+service-account*.json
+*.pem
+.tools/
+.diagnostics/
+*.tsbuildinfo
+test-results/
+playwright-report/
