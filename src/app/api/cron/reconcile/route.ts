@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { serviceClient } from "@/lib/supabase/server";
 import { reconcileYear } from "@/lib/reconciliation";
+import { syncRequestRegister } from "@/lib/register-sync";
 export const maxDuration = 60;
 export async function GET(request: NextRequest) {
   const expected = `Bearer ${process.env.CRON_SECRET ?? ""}`,
@@ -24,7 +25,8 @@ export async function GET(request: NextRequest) {
   try {
     const results = [];
     for (const y of years ?? []) results.push(await reconcileYear(y.id));
-    return NextResponse.json({ ok: true, results });
+    const register = await syncRequestRegister();
+    return NextResponse.json({ ok: true, results, register });
   } catch {
     return NextResponse.json(
       {

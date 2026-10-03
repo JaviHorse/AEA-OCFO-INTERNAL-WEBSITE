@@ -8,9 +8,14 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
+    "test:ux": "node scripts/check-ux.mjs",
     "check:integrations": "node --env-file=.env.local scripts/check-integrations.mjs",
     "db:setup": "node --env-file=.env.local scripts/setup-database.mjs",
-    "check:security": "node --env-file=.env.local scripts/check-client-secrets.mjs"
+    "check:security": "node --env-file=.env.local scripts/check-client-secrets.mjs",
+    "check:register": "node --conditions=react-server --import tsx --env-file=.env.local scripts/check-request-register.ts",
+    "sync:register": "node --conditions=react-server --import tsx --env-file=.env.local scripts/sync-request-register.ts",
+    "check:email": "node --env-file=.env.local scripts/check-email.mjs",
+    "check:gmail": "node --conditions=react-server --import tsx --env-file=.env.local scripts/check-gmail.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
@@ -36,6 +41,7 @@
     "prettier": "^3.9.9",
     "tailwindcss": "^4.0.0",
     "tsx": "^4.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "esbuild": "^0.28.2"
   }
 }

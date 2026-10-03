@@ -18,31 +18,14 @@ for (const table of [
   );
 }
 try {
-  const credentials = JSON.parse(await readFile("GDrive_key.json", "utf8"));
-  const auth = new google.auth.JWT({
-    email: credentials.client_email,
-    key: credentials.private_key,
-    scopes: ["https://www.googleapis.com/auth/drive"],
-    subject: process.env.GOOGLE_IMPERSONATED_USER || undefined,
-  });
-  const api = google.drive({ version: "v3", auth });
-  const { data } = await api.files.get({
-    fileId: process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID,
-    fields: "name,mimeType,driveId,capabilities(canAddChildren)",
-    supportsAllDrives: true,
-  });
-  console.log(
-    `Drive root: accessible; folder=${data.mimeType === "application/vnd.google-apps.folder"}; sharedDrive=${!!data.driveId}; canAddChildren=${!!data.capabilities?.canAddChildren}`,
-  );
-  if (!data.driveId && !process.env.GOOGLE_IMPERSONATED_USER)
-    console.log(
-      "Drive note: service accounts cannot own copied files in My Drive. Use a Shared Drive or authorized Workspace delegation.",
-    );
-} catch {
-  console.log(
-    "Drive root: unavailable. Check credentials and service-account folder access.",
-  );
-}
+  const credentials = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY
+    ? { client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL, private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n") }
+    : JSON.parse(await readFile("GDrive_key.json", "utf8"));
+  const auth = new google.auth.JWT({ email: credentials.client_email, key: credentials.private_key, scopes: ["https://www.googleapis.com/auth/spreadsheets"], subject: process.env.GOOGLE_IMPERSONATED_USER || undefined });
+  const api = google.sheets({ version: "v4", auth });
+  const { data } = await api.spreadsheets.get({ spreadsheetId: process.env.GOOGLE_REQUESTS_SPREADSHEET_ID, fields: "sheets.properties" });
+  console.log(`Sheets register: accessible; configured tab exists=${data.sheets?.some((s) => s.properties.sheetId === Number(process.env.GOOGLE_REQUESTS_SHEET_ID || "0"))}`);
+} catch { console.log("Sheets register: unavailable. Enable the Sheets API and verify Editor sharing with the service account."); }
 try {
   const res = await fetch("https://api.resend.com/domains", {
     headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` },

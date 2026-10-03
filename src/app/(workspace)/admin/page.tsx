@@ -1,6 +1,19 @@
+const settingLabels: Record<string, string> = {
+  finance_notification_email: "Finance notification email",
+  resend_from_email: "Email sender address",
+  notification_recipients: "Additional notification recipients",
+  report_due_days: "Project-end report deadline",
+  reminder_days: "Reminder timing",
+  unprocessed_warning_days: "Processing follow-up timing",
+  long_open_warning_days: "Open request follow-up timing",
+  ocfo_can_record_transactions: "Allow OCFO to record transactions",
+  allow_unlinked_transactions: "Allow transactions without a linked request",
+};
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { workspace } from "@/lib/data";
+import { human } from "@/lib/finance";
+import { requestTypeLabel } from "@/lib/ux";
+import { workspace, type Dataset } from "@/lib/data";
 import { PageHeader, Panel, Field, Badge } from "@/components/ui";
 import { OperationForm } from "@/components/operation-form";
 import { AuditTable } from "@/components/audit-table";
@@ -10,22 +23,40 @@ export default async function Admin({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const { tab = "years" } = await searchParams;
-  const w = await workspace();
+  const tabDatasets: Record<string, Dataset[]> = {
+    years: ["years"],
+    members: ["years", "departments"],
+    departments: ["departments"],
+    projects: ["years", "departments", "projects", "projectDepartments"],
+    types: ["requestTypes"],
+    requirements: ["requestTypes", "requirements"],
+    workflow: ["requestTypes", "requirements"],
+  };
+  const w = await workspace(undefined, tabDatasets[tab] ?? []);
   if (w.role !== "CFO_ADMIN") redirect("/dashboard");
+  const empty = Promise.resolve({ data: [], error: null });
   const results = await Promise.all([
-    w.db.from("memberships").select("*").order("email"),
-    w.db.from("organization_settings").select("*"),
-    w.db
-      .from("notifications")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(100),
-    w.db
-      .from("audit_logs")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(200),
-    w.db.from("users").select("*"),
+    tab === "members"
+      ? w.db.from("memberships").select("*").order("email")
+      : empty,
+    tab === "settings" ? w.db.from("organization_settings").select("*") : empty,
+    tab === "notifications"
+      ? w.db
+          .from("notifications")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(100)
+      : empty,
+    tab === "audit"
+      ? w.db
+          .from("audit_logs")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(200)
+      : empty,
+    ["projects", "members"].includes(tab)
+      ? w.db.from("users").select("*")
+      : empty,
   ]);
   for (const r of results)
     if (r.error) throw new Error("Admin records could not be loaded.");
@@ -54,36 +85,80 @@ export default async function Admin({
   );
   return (
     <>
-      <PageHeader
-        title="Administration"
-        description="Build continuity into your finance operations. Manage the people, rules, and years behind the work."
-      />
+      <PageHeader title="Administration" />
       <div className="admin-tabs">
         {[
-          ["years", "Fiscal years"],
-          ["members", "Memberships"],
-          ["departments", "Departments"],
-          ["projects", "Projects"],
-          ["workflow", "Types & documents"],
-          ["settings", "Settings"],
-          ["notifications", "Notifications"],
-          ["audit", "Audit trail"],
-        ].map(([key, label]) => (
+          ["members", "Members", ["members"]],
+          ["years", "Fiscal Years", ["years"]],
+          ["departments", "Departments", ["departments", "projects"]],
+          ["types", "Request Setup", ["types", "requirements", "workflow"]],
+          ["settings", "Settings", ["settings"]],
+          ["notifications", "System Logs", ["notifications", "audit"]],
+        ].map(([key, label, children]) => (
           <Link
-            key={key}
-            className={tab === key ? "active" : ""}
+            key={String(key)}
+            className={(children as string[]).includes(tab) ? "active" : ""}
             href={`/admin?tab=${key}`}
           >
             {label}
           </Link>
         ))}
       </div>
+      {(["departments", "projects"].includes(tab) ||
+        ["types", "requirements", "workflow"].includes(tab) ||
+        ["notifications", "audit"].includes(tab)) && (
+        <div className="admin-subtabs">
+          {(["departments", "projects"].includes(tab)
+            ? [
+                ["departments", "Departments"],
+                ["projects", "Projects"],
+              ]
+            : ["types", "requirements", "workflow"].includes(tab)
+              ? [
+                  ["types", "Types"],
+                  ["requirements", "Requirements"],
+                ]
+              : [
+                  ["notifications", "Notifications"],
+                  ["audit", "Audit"],
+                ]
+          ).map(([key, label]) => (
+            <Link
+              key={key}
+              className={tab === key ? "active" : ""}
+              href={`/admin?tab=${key}`}
+            >
+              {label}
+            </Link>
+          ))}
+        </div>
+      )}
       {tab === "years" && (
         <>
-          <Panel
-            title="Fiscal-year directory"
-            subtitle="Assign the next CFO, activate the succeeding year, then close the reconciled previous year."
-          >
+          <details className="help-disclosure">
+            <summary>Year setup instructions</summary>
+            <div>
+              <h2>Set up the next academic year</h2>
+              <ol>
+                <li>
+                  Create the year with its dates. Shared department and document
+                  settings remain available.
+                </li>
+                <li>
+                  Use Members to assign next year’s members and Finance
+                  Administrator.
+                </li>
+                <li>
+                  Approve department Budget Requests to establish allocations.
+                </li>
+                <li>
+                  Activate the new year, then close the reconciled previous
+                  year.
+                </li>
+              </ol>
+            </div>
+          </details>
+          <Panel title="Fiscal Years">
             {w.years!.map((y) => (
               <div className="review-entry" key={y.id}>
                 <div className="issue-row">
@@ -124,108 +199,176 @@ export default async function Admin({
               </div>
             ))}
           </Panel>
-          <Panel
-            title="Create a new fiscal year"
-            subtitle="Starts with zero balances. Departments, request types, requirements, and settings are reusable across years."
-          >
-            <OperationForm command="CREATE_YEAR">
-              <div className="form-grid">
-                <Field label="Year label">
-                  <input name="label" placeholder="AY 2026-2027" required />
-                </Field>
-                <Field label="Reference code (YY YY)">
-                  <input
-                    name="code"
-                    pattern="[0-9]{4}"
-                    placeholder="2627"
-                    required
-                  />
-                </Field>
-                <Field label="Start date">
-                  <input type="date" name="start_date" required />
-                </Field>
-                <Field label="End date">
-                  <input type="date" name="end_date" required />
-                </Field>
-              </div>
-              <label className="checkbox-field">
-                <input type="checkbox" name="copy_config" defaultChecked />
-                Copy year-specific guides from the active year
-              </label>
-            </OperationForm>
-          </Panel>
+          <details className="help-disclosure">
+            <summary>+ Create Year</summary>
+            <Panel
+              title="Create a new fiscal year"
+              subtitle="Starts with zero balances. Departments, request types, requirements, and settings are reusable across years."
+            >
+              <OperationForm command="CREATE_YEAR">
+                <div className="form-grid">
+                  <Field label="Academic year name">
+                    <input name="label" placeholder="AY 2026-2027" required />
+                  </Field>
+                  <Field label="Reference year code (e.g. 2627)">
+                    <input
+                      name="code"
+                      pattern="[0-9]{4}"
+                      placeholder="2627"
+                      required
+                    />
+                  </Field>
+                  <Field label="Start date">
+                    <input type="date" name="start_date" required />
+                  </Field>
+                  <Field label="End date">
+                    <input type="date" name="end_date" required />
+                  </Field>
+                </div>
+                <label className="checkbox-field">
+                  <input type="checkbox" name="copy_config" defaultChecked />
+                  Copy year-specific guides from the active year
+                </label>
+              </OperationForm>
+            </Panel>
+          </details>
         </>
       )}
       {tab === "members" && (
         <>
-          <Panel
-            title="Year-specific memberships"
-            subtitle="Emails may be assigned before a member’s first Google sign-in."
-          >
+          <Panel title="Registered Users">
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>Email</th>
-                    <th>Fiscal year</th>
-                    <th>Department</th>
-                    <th>Role</th>
-                    <th>State</th>
+                    {[
+                      "Name",
+                      "Email",
+                      "Department",
+                      "Fiscal Year",
+                      "Registered On",
+                      "Account",
+                      "Status",
+                      "Actions",
+                    ].map((label) => (
+                      <th key={label}>{label}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {members.map((m) => (
-                    <tr key={m.id}>
-                      <td>{m.email}</td>
-                      <td>
-                        {w.years!.find((y) => y.id === m.fiscal_year_id)?.label}
-                      </td>
-                      <td>
-                        {
-                          w.departments.find((d) => d.id === m.department_id)
-                            ?.code
-                        }
-                      </td>
-                      <td>{m.role}</td>
-                      <td>
-                        <Badge value={m.is_active ? "ACTIVE" : "INACTIVE"} />
-                      </td>
-                    </tr>
-                  ))}
+                  {members.map((m) => {
+                    const profile = users.find((u) => u.id === m.user_id);
+                    const closed = w.years!.some(
+                      (y) => y.id === m.fiscal_year_id && y.is_closed,
+                    );
+                    return (
+                      <tr key={m.id}>
+                        <td>{profile?.full_name ?? "Not signed in yet"}</td>
+                        <td>{m.email}</td>
+                        <td>
+                          {
+                            w.departments.find((d) => d.id === m.department_id)
+                              ?.code
+                          }
+                        </td>
+                        <td>
+                          {
+                            w.years!.find((y) => y.id === m.fiscal_year_id)
+                              ?.label
+                          }
+                        </td>
+                        <td>
+                          {profile?.created_at
+                            ? new Date(profile.created_at).toLocaleDateString(
+                                "en-PH",
+                              )
+                            : "Awaiting sign-in"}
+                        </td>
+                        <td>{human(m.role)}</td>
+                        <td>
+                          <Badge value={m.is_active ? "ACTIVE" : "INACTIVE"} />
+                        </td>
+                        <td>
+                          {!closed &&
+                            ["DEPARTMENT_MEMBER", "PROJECT_MEMBER"].includes(
+                              m.role,
+                            ) && (
+                              <details>
+                                <summary>Manage Account</summary>
+                                <OperationForm
+                                  kind="member"
+                                  defaults={{ membership_id: m.id }}
+                                  label="Update Account"
+                                  confirm
+                                >
+                                  <Field label="Department">
+                                    <select
+                                      name="department_id"
+                                      defaultValue={m.department_id}
+                                    >
+                                      {w.departments
+                                        .filter((d) => d.is_active)
+                                        .map((d) => (
+                                          <option key={d.id} value={d.id}>
+                                            {d.name} ({d.code})
+                                          </option>
+                                        ))}
+                                    </select>
+                                  </Field>
+                                  <label className="checkbox-field">
+                                    <input
+                                      type="checkbox"
+                                      name="enabled"
+                                      defaultChecked={m.is_active}
+                                    />
+                                    Account active
+                                  </label>
+                                  <label className="checkbox-field">
+                                    <input type="checkbox" name="promote" />
+                                    Grant Finance Administrator access
+                                  </label>
+                                </OperationForm>
+                              </details>
+                            )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </Panel>
-          <Panel
-            title="Assign or update a membership"
-            subtitle="Changes to roles and access are audit logged."
-          >
-            <OperationForm command="MEMBERSHIP">
-              <div className="form-grid">
-                <Field label="Ateneo email">
-                  <input type="email" name="email" required />
-                </Field>
-                <Field label="Fiscal year">{years}</Field>
-                <Field label="Department">{departments}</Field>
-                <Field label="Role">
-                  <select name="role">
-                    {[
-                      "DEPARTMENT_MEMBER",
-                      "PROJECT_MEMBER",
-                      "OCFO_MEMBER",
-                      "CFO_ADMIN",
-                    ].map((role) => (
-                      <option key={role}>{role}</option>
-                    ))}
-                  </select>
-                </Field>
-              </div>
-              <label className="checkbox-field">
-                <input type="checkbox" name="is_active" defaultChecked />
-                Active membership
-              </label>
-            </OperationForm>
-          </Panel>
+          <details className="help-disclosure">
+            <summary>Assign Account Access</summary>
+            <Panel
+              title="Assign Account Access"
+              subtitle="Enroll an account, carry access into a new fiscal year, or update Administrator privileges. Use Manage Account above to change a Member's department."
+            >
+              <OperationForm
+                command="MEMBERSHIP"
+                confirm
+                label="Save Account Access"
+              >
+                <div className="form-grid">
+                  <Field label="Ateneo or Gmail email">
+                    <input type="email" name="email" required />
+                  </Field>
+                  <Field label="Fiscal Year">{years}</Field>
+                  <Field label="Department">{departments}</Field>
+                  <Field label="Account Type">
+                    <select name="role">
+                      <option value="DEPARTMENT_MEMBER">Member</option>
+                      <option value="CFO_ADMIN">Finance Administrator</option>
+                    </select>
+                  </Field>
+                </div>
+                <label className="checkbox-field">
+                  <input type="checkbox" name="is_active" defaultChecked />
+                  Access enabled
+                </label>
+              </OperationForm>
+            </Panel>
+          </details>
         </>
       )}
       {tab === "departments" && (
@@ -237,261 +380,299 @@ export default async function Admin({
               </div>
             ))}
           </Panel>
-          <Panel title="Create or update a department">
-            <OperationForm command="DEPARTMENT">
-              <div className="form-grid">
-                <Field label="Department code">
-                  <input name="code" required maxLength={12} />
-                </Field>
-                <Field label="Name">
-                  <input name="name" required />
-                </Field>
-              </div>
-              <label className="checkbox-field">
-                <input type="checkbox" name="is_active" defaultChecked />
-                Active
-              </label>
-            </OperationForm>
-          </Panel>
+          <details className="help-disclosure">
+            <summary>Create or update a department</summary>
+            <Panel title="Create or update a department">
+              <OperationForm command="DEPARTMENT">
+                <div className="form-grid">
+                  <Field label="Department code">
+                    <input name="code" required maxLength={12} />
+                  </Field>
+                  <Field label="Name">
+                    <input name="name" required />
+                  </Field>
+                </div>
+                <label className="checkbox-field">
+                  <input type="checkbox" name="is_active" defaultChecked />
+                  Active
+                </label>
+              </OperationForm>
+            </Panel>
+          </details>
         </>
       )}
       {tab === "projects" && (
         <>
-          <Panel title="Create a project">
-            <OperationForm command="PROJECT">
-              <div className="form-grid">
-                <Field label="Name">
-                  <input name="name" required />
-                </Field>
-                <Field label="Fiscal year">{years}</Field>
-                <Field label="Start date">
-                  <input name="start_date" type="date" />
-                </Field>
-                <Field label="End date">
-                  <input name="end_date" type="date" />
-                </Field>
-                <Field label="Status">
-                  <select name="status">
-                    <option>PLANNED</option>
-                    <option>ACTIVE</option>
-                    <option>COMPLETED</option>
-                    <option>CANCELLED</option>
-                  </select>
-                </Field>
-                <Field
-                  label="Participating departments"
-                  hint="Hold Ctrl or Cmd to select multiple."
-                >
-                  <select name="department_ids" multiple required>
-                    {w.departments.map((d) => (
-                      <option value={d.id} key={d.id}>
-                        {d.code}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              </div>
-              <Field label="Description">
-                <textarea name="description" />
-              </Field>
-            </OperationForm>
-          </Panel>
-          <Panel
-            title="Assign a project member"
-            subtitle="Project access supplements department membership and never crosses its boundaries."
-          >
-            <OperationForm
-              command="PROJECT_MEMBER"
-              defaults={{ fiscal_year_id: w.year.id }}
-            >
-              <Field label="Project">
-                <select name="project_id" required>
-                  {w.projects.map((p) => (
-                    <option value={p.id} key={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="User">
-                <select name="user_id" required>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.email}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Department">{departments}</Field>
-            </OperationForm>
-          </Panel>
-          {w.projects.map((project) => (
-            <Panel title={`Edit ${project.name}`} key={project.id}>
-              <OperationForm
-                command="PROJECT"
-                defaults={{
-                  id: project.id,
-                  fiscal_year_id: project.fiscal_year_id,
-                }}
-              >
-                <Field label="Name">
-                  <input name="name" defaultValue={project.name} required />
-                </Field>
-                <Field label="Description">
-                  <textarea
-                    name="description"
-                    defaultValue={project.description ?? ""}
-                  />
-                </Field>
+          <details className="help-disclosure">
+            <summary>Create a project</summary>
+            <Panel title="Create a project">
+              <OperationForm command="PROJECT">
                 <div className="form-grid">
-                  <Field label="Start">
-                    <input
-                      type="date"
-                      name="start_date"
-                      defaultValue={project.start_date ?? ""}
-                    />
+                  <Field label="Name">
+                    <input name="name" required />
                   </Field>
-                  <Field label="End">
-                    <input
-                      type="date"
-                      name="end_date"
-                      defaultValue={project.end_date ?? ""}
-                    />
+                  <Field label="Fiscal year">{years}</Field>
+                  <Field label="Start date">
+                    <input name="start_date" type="date" />
+                  </Field>
+                  <Field label="End date">
+                    <input name="end_date" type="date" />
+                  </Field>
+                  <Field label="Status">
+                    <select name="status">
+                      <option value="PLANNED">Planned</option>
+                      <option value="ACTIVE">Active</option>
+                      <option value="COMPLETED">Completed</option>
+                      <option value="CANCELLED">Cancelled</option>
+                    </select>
+                  </Field>
+                  <Field
+                    label="Participating departments"
+                    hint="Hold Ctrl or Cmd to select multiple."
+                  >
+                    <select name="department_ids" multiple required>
+                      {w.departments.map((d) => (
+                        <option value={d.id} key={d.id}>
+                          {d.code}
+                        </option>
+                      ))}
+                    </select>
                   </Field>
                 </div>
-                <Field label="Status">
-                  <select name="status" defaultValue={project.status}>
-                    <option>PLANNED</option>
-                    <option>ACTIVE</option>
-                    <option>COMPLETED</option>
-                    <option>CANCELLED</option>
-                  </select>
-                </Field>
-                <Field label="Departments">
-                  <select
-                    name="department_ids"
-                    multiple
-                    defaultValue={w.projectDepartments
-                      .filter((pd) => pd.project_id === project.id)
-                      .map((pd) => pd.department_id)}
-                  >
-                    {w.departments.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.code}
-                      </option>
-                    ))}
-                  </select>
+                <Field label="Description">
+                  <textarea name="description" />
                 </Field>
               </OperationForm>
             </Panel>
-          ))}
-        </>
-      )}
-      {tab === "workflow" && (
-        <>
-          <div className="admin-grid">
-            {w.requestTypes.map((t) => (
-              <Panel title={t.code} key={t.id}>
-                <OperationForm command="REQUEST_TYPE" defaults={{ id: t.id }}>
-                  <Field label="Display name">
-                    <input name="name" defaultValue={t.name} required />
+          </details>
+          <details className="help-disclosure">
+            <summary>Assign Project Member</summary>
+            <Panel
+              title="Assign a project member"
+              subtitle="Project access supplements department membership and never crosses its boundaries."
+            >
+              <OperationForm
+                command="PROJECT_MEMBER"
+                defaults={{ fiscal_year_id: w.year.id }}
+              >
+                <Field label="Project">
+                  <select name="project_id" required>
+                    {w.projects.map((p) => (
+                      <option value={p.id} key={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="User">
+                  <select name="user_id" required>
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.email}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Department">{departments}</Field>
+              </OperationForm>
+            </Panel>
+          </details>
+          {w.projects.map((project) => (
+            <details className="help-disclosure" key={project.id}>
+              <summary>{project.name}</summary>
+              <Panel title="Edit Project">
+                <OperationForm
+                  command="PROJECT"
+                  defaults={{
+                    id: project.id,
+                    fiscal_year_id: project.fiscal_year_id,
+                  }}
+                >
+                  <Field label="Name">
+                    <input name="name" defaultValue={project.name} required />
                   </Field>
                   <Field label="Description">
                     <textarea
                       name="description"
-                      defaultValue={t.description ?? ""}
+                      defaultValue={project.description ?? ""}
                     />
                   </Field>
-                  <label className="checkbox-field">
-                    <input
-                      type="checkbox"
-                      name="is_active"
-                      defaultChecked={t.is_active}
-                    />
-                    Active
-                  </label>
-                  <label className="checkbox-field">
-                    <input
-                      type="checkbox"
-                      name="creates_commitment"
-                      defaultChecked={t.creates_commitment}
-                    />
-                    Creates commitment on approval
-                  </label>
-                  <Field label="Workflow configuration (JSON)">
-                    <textarea
-                      name="process_config"
-                      data-json="true"
-                      defaultValue={JSON.stringify(t.process_config)}
-                    />
+                  <div className="form-grid">
+                    <Field label="Start">
+                      <input
+                        type="date"
+                        name="start_date"
+                        defaultValue={project.start_date ?? ""}
+                      />
+                    </Field>
+                    <Field label="End">
+                      <input
+                        type="date"
+                        name="end_date"
+                        defaultValue={project.end_date ?? ""}
+                      />
+                    </Field>
+                  </div>
+                  <Field label="Status">
+                    <select name="status" defaultValue={project.status}>
+                      <option value="PLANNED">Planned</option>
+                      <option value="ACTIVE">Active</option>
+                      <option value="COMPLETED">Completed</option>
+                      <option value="CANCELLED">Cancelled</option>
+                    </select>
+                  </Field>
+                  <Field label="Departments">
+                    <select
+                      name="department_ids"
+                      multiple
+                      defaultValue={w.projectDepartments
+                        .filter((pd) => pd.project_id === project.id)
+                        .map((pd) => pd.department_id)}
+                    >
+                      {w.departments.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.code}
+                        </option>
+                      ))}
+                    </select>
                   </Field>
                 </OperationForm>
               </Panel>
-            ))}
-          </div>
-          <Panel
-            title="Add or update a document requirement"
-            subtitle="Use the same type and document code to update an existing requirement."
-          >
-            <OperationForm command="REQUIREMENT">
-              <div className="form-grid">
-                <Field label="Request type">
-                  <select name="request_type_id">
-                    {w.requestTypes.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Document code">
-                  <input
-                    name="document_code"
-                    required
-                    pattern="[A-Z0-9_]+"
-                    placeholder="PDAF"
-                  />
-                </Field>
-                <Field label="Label">
-                  <input name="label" required />
-                </Field>
-                <Field label="Order">
-                  <input type="number" name="display_order" defaultValue={1} />
-                </Field>
-                <Field label="Condition">
-                  <select name="condition_type">
-                    <option value="">Always</option>
-                    <option>AMOUNT_LT</option>
-                  </select>
-                </Field>
-                <Field label="Condition JSON">
-                  <input
-                    name="condition_json"
-                    data-json="true"
-                    defaultValue={'{"amount":15000}'}
-                  />
-                </Field>
-                <Field label="Template URL">
-                  <input name="template_url" type="url" />
-                </Field>
-              </div>
-              <label className="checkbox-field">
-                <input name="is_required" type="checkbox" defaultChecked />
-                Required
-              </label>
-            </OperationForm>
-          </Panel>
-          <Panel title="Current requirement configuration">
-            {w.requirements.map((r) => (
-              <p key={r.id}>
-                {w.requestTypes.find((t) => t.id === r.request_type_id)?.code} ·{" "}
-                {r.document_code} · {r.label}
-                {r.condition_type
-                  ? ` · amount < ${r.condition_json?.amount}`
-                  : ""}
-              </p>
-            ))}
-          </Panel>
+            </details>
+          ))}
+        </>
+      )}
+      {(tab === "types" || tab === "requirements" || tab === "workflow") && (
+        <>
+          {tab !== "requirements" && (
+            <div className="admin-grid">
+              {w.requestTypes.map((t) => (
+                <details className="help-disclosure" key={t.id}>
+                  <summary>{requestTypeLabel(t)}</summary>
+                  <Panel title="Edit Request Type">
+                    <OperationForm
+                      command="REQUEST_TYPE"
+                      defaults={{ id: t.id, process_config: t.process_config }}
+                    >
+                      <Field label="Display name">
+                        <input name="name" defaultValue={t.name} required />
+                      </Field>
+                      <Field label="Description">
+                        <textarea
+                          name="description"
+                          defaultValue={t.description ?? ""}
+                        />
+                      </Field>
+                      <label className="checkbox-field">
+                        <input
+                          type="checkbox"
+                          name="is_active"
+                          defaultChecked={t.is_active}
+                        />
+                        Active
+                      </label>
+                      <label className="checkbox-field">
+                        <input
+                          type="checkbox"
+                          name="creates_commitment"
+                          defaultChecked={t.creates_commitment}
+                        />
+                        Creates commitment on approval
+                      </label>
+                    </OperationForm>
+                  </Panel>
+                </details>
+              ))}
+            </div>
+          )}
+          {tab !== "types" && (
+            <>
+              <details className="help-disclosure">
+                <summary>+ Add Requirement</summary>
+                <Panel
+                  title="Add or update a document requirement"
+                  subtitle="Use the same type and document code to update an existing requirement."
+                >
+                  <OperationForm command="REQUIREMENT">
+                    <div className="form-grid">
+                      <Field label="Request type">
+                        <select name="request_type_id">
+                          {w.requestTypes.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field label="Document code">
+                        <input
+                          name="document_code"
+                          required
+                          pattern="[A-Z0-9_]+"
+                          placeholder="PDAF"
+                        />
+                      </Field>
+                      <Field label="Label">
+                        <input name="label" required />
+                      </Field>
+                      <Field label="Order">
+                        <input
+                          type="number"
+                          name="display_order"
+                          defaultValue={1}
+                        />
+                      </Field>
+                      <Field label="Condition">
+                        <select name="condition_type">
+                          <option value="">Always</option>
+                          <option value="AMOUNT_LT">
+                            Required below an amount
+                          </option>
+                        </select>
+                      </Field>
+                      <Field
+                        label="Amount threshold (PHP)"
+                        hint="Used only for conditional documents. PDAF is required strictly below this amount."
+                      >
+                        <input
+                          name="condition_amount"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          defaultValue="15000"
+                        />
+                      </Field>
+                      <Field label="Template URL">
+                        <input name="template_url" type="url" />
+                      </Field>
+                    </div>
+                    <label className="checkbox-field">
+                      <input
+                        name="is_required"
+                        type="checkbox"
+                        defaultChecked
+                      />
+                      Required
+                    </label>
+                  </OperationForm>
+                </Panel>
+              </details>
+              <Panel title="Document Requirements">
+                {w.requirements.map((r) => (
+                  <p key={r.id}>
+                    {
+                      w.requestTypes.find((t) => t.id === r.request_type_id)
+                        ?.code
+                    }{" "}
+                    · {r.document_code} · {r.label}
+                    {r.condition_type
+                      ? ` · amount < ${r.condition_json?.amount}`
+                      : ""}
+                  </p>
+                ))}
+              </Panel>
+            </>
+          )}
         </>
       )}
       {tab === "settings" && (
@@ -499,7 +680,6 @@ export default async function Admin({
           {[
             "finance_notification_email",
             "resend_from_email",
-            "google_drive_root_folder_id",
             "notification_recipients",
             "report_due_days",
             "reminder_days",
@@ -508,54 +688,65 @@ export default async function Admin({
             "ocfo_can_record_transactions",
             "allow_unlinked_transactions",
           ].map((key) => (
-            <Panel title={key.replaceAll("_", " ")} key={key}>
-              <OperationForm command="SETTING" defaults={{ key }}>
-                {[
-                  "ocfo_can_record_transactions",
-                  "allow_unlinked_transactions",
-                ].includes(key) ? (
-                  <label className="checkbox-field">
-                    <input
-                      type="checkbox"
-                      name="value"
-                      defaultChecked={!!values[key]}
-                    />
-                    Enabled
-                  </label>
-                ) : (
-                  <Field label="Value">
-                    <input
-                      name="value"
-                      type={
-                        key.endsWith("_days")
-                          ? "number"
-                          : key === "notification_recipients"
-                            ? "text"
-                            : key.endsWith("_email")
-                              ? "email"
-                              : "text"
-                      }
-                      data-json={
-                        key === "notification_recipients" ? "true" : undefined
-                      }
-                      defaultValue={
+            <details className="help-disclosure" key={key}>
+              <summary>{settingLabels[key]}</summary>
+              <Panel title="Edit Setting">
+                <OperationForm command="SETTING" defaults={{ key }}>
+                  {[
+                    "ocfo_can_record_transactions",
+                    "allow_unlinked_transactions",
+                  ].includes(key) ? (
+                    <label className="checkbox-field">
+                      <input
+                        type="checkbox"
+                        name="value"
+                        defaultChecked={!!values[key]}
+                      />
+                      Enabled
+                    </label>
+                  ) : (
+                    <Field
+                      label={
                         key === "notification_recipients"
-                          ? JSON.stringify(values[key] ?? [])
-                          : (values[key] ?? "")
+                          ? "Email addresses (separate with commas)"
+                          : key.endsWith("_days")
+                            ? "Number of days"
+                            : "Setting"
                       }
-                      required
-                    />
-                  </Field>
-                )}
-              </OperationForm>
-            </Panel>
+                    >
+                      <input
+                        name="value"
+                        type={
+                          key.endsWith("_days")
+                            ? "number"
+                            : key === "notification_recipients"
+                              ? "text"
+                              : key.endsWith("_email")
+                                ? "email"
+                                : "text"
+                        }
+                        data-emails={
+                          key === "notification_recipients" ? "true" : undefined
+                        }
+                        defaultValue={
+                          key === "notification_recipients"
+                            ? (values[key] ?? []).join(", ")
+                            : (values[key] ?? "")
+                        }
+                        required
+                      />
+                    </Field>
+                  )}
+                </OperationForm>
+              </Panel>
+            </details>
           ))}
-          <Panel title="Finance guide">
+          <Panel title="Help & Requirements">
             <p className="muted">
-              CFO and OCFO members can edit guide content and FAQs directly.
+              Finance administrators can edit help content and FAQs directly.
             </p>
             <Link className="text-link" href="/guide">
-              Edit finance guide ↗
+              Edit Help & Requirements ↗
             </Link>
           </Panel>
         </div>
@@ -579,7 +770,7 @@ export default async function Admin({
               <tbody>
                 {notifications.map((n) => (
                   <tr key={n.id}>
-                    <td>{n.event_type}</td>
+                    <td>{human(n.event_type)}</td>
                     <td>{n.recipient}</td>
                     <td>
                       <Badge value={n.delivery_status} />

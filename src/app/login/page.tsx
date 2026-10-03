@@ -1,81 +1,62 @@
+import Link from "next/link";
 import { LoginButton } from "@/components/login-button";
 import { oauthErrorMessage } from "@/lib/oauth-errors";
-import {
-  Landmark,
-  ArrowUpRight,
-  ShieldCheck,
-  FolderCheck,
-  ChartNoAxesCombined,
-} from "lucide-react";
+import { Landmark } from "lucide-react";
 export default async function Login({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; register?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, register } = await searchParams;
   return (
-    <main className="login-page">
-      <section className="login-story">
-        <div className="brand">
-          <span className="brand-icon">
-            <Landmark size={24} />
-          </span>
-          <span>
-            AEA<span className="brand-sub">FINANCE PLATFORM</span>
-          </span>
+    <main className="account-page login-portal">
+      <section className="account-card">
+        <div className="portal-logo">
+          <Landmark size={30} />
+          <strong>AEA Finance</strong>
         </div>
-        <div>
-          <span className="eyebrow">ATENEO ECONOMICS ASSOCIATION</span>
-          <h1>
-            Good stewardship.
-            <br />
-            <em>Stronger possibilities.</em>
-          </h1>
-          <p>
-            A shared home for your department’s finances. From the first request
-            to the final reconciliation.
-          </p>
-          <div className="login-features">
-            <span>
-              <ChartNoAxesCombined /> Clear financial visibility
-            </span>
-            <span>
-              <FolderCheck /> Documents, in one place
-            </span>
-            <span>
-              <ShieldCheck /> Accountable at every step
-            </span>
+        <h1>{register ? "Register your account" : "Welcome to AEA Finance"}</h1>
+        <p>
+          {register
+            ? "Verify your Ateneo email, then choose your department."
+            : "Sign in to submit or review requests."}
+        </p>
+        {error && (
+          <div className="alert critical" role="alert">
+            {oauthErrorMessage(error)}
           </div>
-        </div>
-        <small>OFFICE OF THE CHIEF FINANCIAL OFFICER</small>
-      </section>
-      <section className="login-form">
-        <div className="login-card">
-          <span className="eyebrow">WELCOME TO AEA FINANCE</span>
-          <h2>Your work starts here.</h2>
+        )}
+        <LoginButton
+          label={
+            register
+              ? "Continue with Ateneo Google Account"
+              : "Continue with Google"
+          }
+        />
+        <p className="subtle-note">
+          {register
+            ? "Choose your @student.ateneo.edu account. Existing registered accounts will open their dashboard."
+            : "Use your Ateneo Google account or a Gmail account enrolled by Finance."}
+        </p>
+        {register ? (
           <p>
-            Sign in with your Ateneo Google account to access your finance
-            workspace.
+            <Link className="text-link" href="/login">
+              Already registered? Back to sign in
+            </Link>
           </p>
-          {error && (
-            <div className="alert critical">{oauthErrorMessage(error)}</div>
-          )}
-          <LoginButton />
-          <div className="login-note">
-            <ShieldCheck size={17} />
-            <span>
-              Available to authorized AEA members with an active fiscal-year
-              membership.
-            </span>
+        ) : (
+          <div className="registration-invite">
+            <Link className="button secondary" href="/register">
+              Register Your Account
+            </Link>
           </div>
-          <a
-            className="contact-link"
-            href="mailto:aea.college.org@student.ateneo.edu"
-          >
-            Need access? Contact OCFO <ArrowUpRight size={14} />
-          </a>
-        </div>
-        <small>AEA Finance · Built for continuity.</small>
+        )}
+        <a
+          className="text-link"
+          href="mailto:aea.college.org@student.ateneo.edu"
+        >
+          Need help? Contact Finance
+        </a>
       </section>
     </main>
   );

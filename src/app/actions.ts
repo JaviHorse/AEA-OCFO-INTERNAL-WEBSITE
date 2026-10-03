@@ -4,7 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { session, requireFinance, yearContext } from "@/lib/auth";
 import { serviceClient, serverClient } from "@/lib/supabase/server";
-import { archiveRequest, validateSubmissionFolder } from "@/lib/google-drive";
+import {
+  validateSubmissionFolder,
+  DriveError,
+} from "@/lib/google-drive";
+import { syncRequestRegister } from "@/lib/register-sync";
 import { extractDriveFolderId } from "@/lib/drive-url";
 import {
   notifyEvent,
@@ -12,8 +16,9 @@ import {
   sendSubmissionConfirmation,
   sendDiscrepancyAlert,
 } from "@/lib/email";
-import { cents } from "@/lib/finance";
+import { cents, human } from "@/lib/finance";
 import type { FinanceRequest } from "@/lib/types";
+import { assertCanFile, isAdmin } from "@/lib/permissions";
 export type ActionResult = {
   ok: boolean;
   message?: string;
@@ -51,7 +56,9 @@ const failure = (e: unknown): ActionResult => ({
   ok: false,
   message:
     e instanceof z.ZodError
-      ? e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")
+      ? e.issues
+          .map((i) => `${human(String(i.path[0] ?? "Details"))}: ${i.message}`)
+          .join("; ")
       : e instanceof Error
         ? e.message
         : "The action could not be completed.",
@@ -71,13 +78,24 @@ export async function validateDriveAction(url: string): Promise<ActionResult> {
     await session();
     return { ok: true, data: await validateSubmissionFolder(url) };
   } catch (e) {
-    return failure(e);
+    const message =
+      e instanceof DriveError && e.code === "EMPTY"
+        ? "This folder is empty. Add your required documents, then check it again."
+        : e instanceof DriveError && e.code === "SHORTCUT"
+          ? "Replace folder shortcuts with the actual document files, then check it again."
+          : "We couldn’t access this Google Drive folder. Check the link and sharing settings, or ask OCFO for help, then try again.";
+    return { ok: false, message };
   }
 }
 export async function saveRequest(input: unknown): Promise<ActionResult> {
   try {
     const p = requestSchema.parse(input);
     const s = await yearContext(p.fiscal_year_id);
+    assertCanFile(s.role);
+    assertCanFile(s.yearRole);
+    const department = s.yearMemberships.find((m) => m.role === "DEPARTMENT_MEMBER");
+    if (!department || department.department_id !== p.department_id)
+      throw new Error("Requests must use your registered department.");
     if (s.readOnly) throw new Error("This year is read-only.");
     let folderId: string | undefined;
     if (p.source_folder_url)
@@ -98,18 +116,17 @@ export async function saveRequest(input: unknown): Promise<ActionResult> {
       source_folder_id: folderId ?? null,
     })) as FinanceRequest;
     if (p.submit) {
-      const archived = await archiveRequest(r);
+      const recorded = await syncRequestRegister(r.id);
       await Promise.all([
         sendNewSubmissionNotification(r),
         sendSubmissionConfirmation(r),
       ]);
-      if (!archived.ok) await sendDiscrepancyAlert(r);
       return {
         ok: true,
         id: r.id,
-        message: archived.ok
+        message: recorded.ok
           ? "Request submitted."
-          : "Request submitted; official Drive archival failed. OCFO can retry from the request page.",
+          : "Request submitted. Sheets recording is pending; Finance can retry it from the request page.",
       };
     }
     return { ok: true, id: r.id };
@@ -132,6 +149,10 @@ export async function requestAction(
     if (!allowed.includes(command)) throw new Error("Invalid action.");
     const id = uuid.parse(input.id);
     const s = await session();
+    if (["REVIEW", "VERIFY_DOCUMENT", "FLAG_ISSUE"].includes(command) && !isAdmin(s.role))
+      throw new Error("Finance Administrator access is required.");
+    if (command === "TRANSITION" && input.status !== "CANCELLED" && !isAdmin(s.role))
+      throw new Error("Members cannot review or approve financial requests.");
     const { data: r } = await s.db
       .from("requests")
       .select("*")
@@ -185,10 +206,17 @@ export async function requestAction(
     const result = await rpc(command, p);
     if (command === "TRANSITION") {
       const changed = result as FinanceRequest;
-      await notifyEvent(String(p.status), changed);
-      if (p.status === "APPROVED" && changed.status === "COMPLETED")
-        await notifyEvent("COMPLETED", changed);
+      // The finance RPC has committed. Integration failures must not report
+      // the saved decision as unsuccessful or prompt a duplicate decision.
+      const warning: string[] = [];
+      const [sheetResult, emailResult] = await Promise.allSettled([
+        syncRequestRegister(id), notifyEvent(String(p.status), changed),
+      ]);
+      if (sheetResult.status === "rejected" || !sheetResult.value.ok) warning.push("Sheets recording remains pending.");
+      if (emailResult.status === "rejected") warning.push("Email notification could not be sent.");
+      else if (emailResult.value && !emailResult.value.ok) warning.push(emailResult.value.message ?? "Email notification could not be sent.");
       if (p.status === "APPROVED") {
+        try {
         const { count } = await serviceClient()
           .from("discrepancies")
           .select("*", { count: "exact", head: true })
@@ -196,7 +224,9 @@ export async function requestAction(
           .eq("severity", "CRITICAL")
           .eq("status", "OPEN");
         if (count) await sendDiscrepancyAlert(changed);
+        } catch { warning.push("Finance alert could not be sent."); }
       }
+      return { ok: true, message: warning.length ? warning.join(" ") : undefined };
     }
     if (command === "VERIFY_DOCUMENT" && !p.is_verified)
       await notifyEvent("MISSING_REQUIRED_DOCUMENT", r);
@@ -244,46 +274,17 @@ export async function recordTransaction(
     return failure(e);
   }
 }
-export async function retryArchive(id: string): Promise<ActionResult> {
+export async function retryRegisterSync(id: string): Promise<ActionResult> {
   try {
     uuid.parse(id);
     const s = await session();
-    const { data: r } = await s.db
-      .from("requests")
-      .select("*")
-      .eq("id", id)
-      .single();
-    if (!r) throw new Error("Request not found.");
+    const { data: r } = await s.db.from("requests").select("*").eq("id", id).single();
+    if (!r || !r.reference_code || r.status === "DRAFT") throw new Error("Submitted request not found.");
     await requireFinance(r.fiscal_year_id);
-    if (
-      ![
-        "SUBMITTED",
-        "UNDER_OCFO_REVIEW",
-        "NEEDS_REVISION",
-        "READY_FOR_CFO",
-      ].includes(r.status)
-    )
-      throw new Error("Archival retries are allowed only before approval.");
-    const { data: locked, error } = await serviceClient()
-      .from("requests")
-      .update({
-        drive_copy_status: "COPYING",
-        drive_copy_started_at: new Date().toISOString(),
-      })
-      .eq("id", id)
-      .or(
-        `drive_copy_status.in.(FAILED,PENDING),and(drive_copy_status.eq.COPYING,drive_copy_started_at.lt.${new Date(Date.now() - 300000).toISOString()})`,
-      )
-      .select("id")
-      .maybeSingle();
-    if (error || !locked)
-      throw new Error("Archive is already running or complete.");
-    const result = await archiveRequest(r);
+    const result = await syncRequestRegister(id);
     revalidatePath("/", "layout");
-    return { ok: result.ok, message: result.message };
-  } catch (e) {
-    return failure(e);
-  }
+    return { ok: result.ok, message: result.queued ? "Request queued for Sheets recording." : result.message ?? "Request register updated." };
+  } catch (e) { return failure(e); }
 }
 export async function adminAction(
   command: string,
@@ -331,7 +332,6 @@ export async function adminAction(
           "long_open_warning_days",
           "ocfo_can_record_transactions",
           "allow_unlinked_transactions",
-          "google_drive_root_folder_id",
           "workflow_overrides",
         ])
         .parse(input.key);
@@ -349,11 +349,6 @@ export async function adminAction(
         ].includes(key)
       )
         p.value = z.boolean().parse(input.value);
-      else if (key === "google_drive_root_folder_id")
-        p.value = z
-          .string()
-          .regex(/^[\w-]{10,}$/)
-          .parse(input.value);
       else p.value = z.record(z.string(), z.unknown()).parse(input.value);
     }
     if (command === "CREATE_YEAR") {
@@ -401,6 +396,21 @@ export async function adminAction(
   } catch (e) {
     return failure(e);
   }
+}
+export async function manageRegisteredUser(input: Record<string, unknown>): Promise<ActionResult> {
+  try {
+    const s = await requireFinance(undefined, true);
+    const p = z.object({
+      membership_id: uuid,
+      department_id: uuid,
+      enabled: z.boolean(),
+      promote: z.boolean().default(false),
+    }).parse(input);
+    const { error } = await serviceClient().rpc("manage_registered_user", { actor: s.user.id, ...p });
+    if (error) throw new Error(error.message);
+    revalidatePath("/", "layout");
+    return { ok: true, message: "Account access updated." };
+  } catch (e) { return failure(e); }
 }
 export async function saveGuide(
   input: Record<string, unknown>,

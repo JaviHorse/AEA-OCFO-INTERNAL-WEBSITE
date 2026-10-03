@@ -3,6 +3,8 @@ const secrets = [
   "SUPABASE_SERVICE_ROLE_KEY",
   "RESEND_API_KEY",
   "GOOGLE_PRIVATE_KEY",
+  "GOOGLE_GMAIL_CLIENT_SECRET",
+  "GOOGLE_GMAIL_REFRESH_TOKEN",
 ]
   .map((k) => process.env[k])
   .filter(Boolean);

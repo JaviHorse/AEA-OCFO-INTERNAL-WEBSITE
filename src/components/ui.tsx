@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowUpRight, Inbox } from "lucide-react";
 import { human } from "@/lib/finance";
+export { Field } from "./field";
 export function Badge({ value }: { value: string }) {
   return (
     <span className={`badge badge-${value.toLowerCase()}`}>{human(value)}</span>
@@ -14,15 +15,15 @@ export function PageHeader({
 }: {
   eyebrow?: string;
   title: string;
-  description: string;
+  description?: string;
   action?: React.ReactNode;
 }) {
   return (
     <div className="page-heading">
       <div>
-        <span className="eyebrow">{eyebrow ?? "YOUR FINANCE WORKSPACE"}</span>
+        {eyebrow && <span className="eyebrow">{eyebrow}</span>}
         <h1>{title}</h1>
-        <p>{description}</p>
+        {description && <p>{description}</p>}
       </div>
       {action}
     </div>
@@ -45,7 +46,7 @@ export function Empty({
         <Inbox size={23} />
       </span>
       <h3>{title}</h3>
-      <p>{description}</p>
+      {description && <p>{description}</p>}
       {href && (
         <Link className="button secondary" href={href}>
           {label ?? "Get started"}
@@ -79,22 +80,5 @@ export function Panel({
       </div>
       {children}
     </section>
-  );
-}
-export function Field({
-  label,
-  children,
-  hint,
-}: {
-  label: string;
-  children: React.ReactNode;
-  hint?: string;
-}) {
-  return (
-    <label className="field">
-      <span>{label}</span>
-      {children}
-      {hint && <small>{hint}</small>}
-    </label>
   );
 }
