@@ -64,6 +64,7 @@ async function loadWorkspace(
     departmentId?: string;
     requestId?: string;
     projectId?: string;
+    page?: number;
   } = {},
 ) {
   const ctx = await yearContext(yearId);
@@ -90,19 +91,22 @@ async function loadWorkspace(
   };
   const requestQuery = db
     .from("requests")
-    .select("*")
+    .select("*", { count: "exact" })
     .eq("fiscal_year_id", ctx.year.id)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .order("id");
   const transactionsQuery = db
     .from("transactions")
-    .select("*")
+    .select("*", { count: "exact" })
     .eq("fiscal_year_id", ctx.year.id)
-    .order("transaction_date", { ascending: false });
+    .order("transaction_date", { ascending: false })
+    .order("id");
   const issuesQuery = db
     .from("discrepancies")
-    .select("*")
+    .select("*", { count: "exact" })
     .eq("fiscal_year_id", ctx.year.id)
-    .order("detected_at", { ascending: false });
+    .order("detected_at", { ascending: false })
+    .order("id");
   if (filter.projectId) {
     requestQuery.eq("project_id", filter.projectId);
     transactionsQuery.eq("project_id", filter.projectId);
@@ -111,9 +115,43 @@ async function loadWorkspace(
     transactionsQuery.eq("request_id", filter.requestId);
     issuesQuery.eq("entity_id", filter.requestId);
   }
+  if (filter.page !== undefined) {
+    const offset = (Math.max(1, filter.page) - 1) * 50;
+    requestQuery.range(offset, offset + 49);
+    transactionsQuery.range(offset, offset + 49);
+    issuesQuery.range(offset, offset + 49);
+  }
+  const projectsQuery = db
+    .from("projects")
+    .select("*", { count: "exact" })
+    .eq("fiscal_year_id", ctx.year.id)
+    .order("name")
+    .order("id");
+  if (filter.projectId) projectsQuery.eq("id", filter.projectId);
+  if (filter.page !== undefined && !filter.departmentId) {
+    const offset = (Math.max(1, filter.page) - 1) * 50;
+    projectsQuery.range(offset, offset + 49);
+  }
+  const projectsResult = wanted("projects")
+    ? Promise.resolve(projectsQuery)
+    : empty;
+  const projectDepartments = async () => {
+    // Restrict relationships to this year's displayed projects, not all years.
+    const projectRecords = await projectsResult;
+    if (projectRecords.error) return projectRecords;
+    const ids = filter.projectId
+      ? [filter.projectId]
+      : projectRecords.data.map((p) => p.id);
+    if (!ids.length) return await empty;
+    const query = db
+      .from("project_departments")
+      .select("*")
+      .in("project_id", ids);
+    return await (finance ? query : query.in("department_id", departmentIds));
+  };
   const results = await Promise.all([
     wanted("departments") ? referenceData(ctx.year.id, "departments") : empty,
-    wanted("financials")
+    wanted("financials") && finance
       ? scope(
           db
             .from("department_financials")
@@ -123,25 +161,12 @@ async function loadWorkspace(
       : empty,
     wanted("requests") ? scope(requestQuery) : empty,
     wanted("requestTypes") ? referenceData(ctx.year.id, "requestTypes") : empty,
-    wanted("projects")
-      ? db
-          .from("projects")
-          .select("*")
-          .eq("fiscal_year_id", ctx.year.id)
-          .order("name")
-      : empty,
+    projectsResult,
     wanted("transactions") ? scope(transactionsQuery) : empty,
     wanted("issues") ? scope(issuesQuery) : empty,
     wanted("requirements") ? referenceData(ctx.year.id, "requirements") : empty,
     wanted("years") ? referenceData(ctx.year.id, "years") : empty,
-    wanted("projectDepartments")
-      ? finance
-        ? db.from("project_departments").select("*")
-        : db
-            .from("project_departments")
-            .select("*")
-            .in("department_id", departmentIds)
-      : empty,
+    wanted("projectDepartments") ? projectDepartments() : empty,
   ]);
   for (const r of results)
     if (r.error)
@@ -150,6 +175,12 @@ async function loadWorkspace(
       );
   return {
     ...ctx,
+    historyCount: Math.max(
+      ...(filter.departmentId || filter.projectId
+        ? [2, 5, 6]
+        : [2, 4, 5, 6]
+      ).map((i) => ("count" in results[i] ? Number(results[i].count ?? 0) : 0)),
+    ),
     departments: results[0].data as Department[],
     financials: results[1].data as Financial[],
     requests: results[2].data as FinanceRequest[],

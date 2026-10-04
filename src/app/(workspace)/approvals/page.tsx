@@ -19,7 +19,7 @@ export default async function Approvals({
       {p.notice === "delivery-warning" && (
         <p className="alert" role="status">
           Decision saved. An email or Sheets update is pending. Check the
-          ticket's notification delivery history.
+          ticket&apos;s notification delivery history.
         </p>
       )}
       <RequestListControls
@@ -35,14 +35,13 @@ export default async function Approvals({
       />
       <RequestTable
         filteredEmpty={hasRequestFilters(p)}
-        filters={false}
+
         requests={w.requests}
         departments={w.departments}
         types={w.requestTypes}
         finance
         queue="decisions"
         yearId={w.year.id}
-        readOnly
       />
     </>
   );

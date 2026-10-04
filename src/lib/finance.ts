@@ -90,5 +90,9 @@ export function allowedTargets(status: Status, role: Role): Status[] {
   return result;
 }
 export function visibleTargets(status: Status, role: Role): Status[] {
-  return allowedTargets(status, role).filter(target => !isFinance(role) || ["APPROVED", "REJECTED", "NEEDS_REVISION"].includes(target));
+  return allowedTargets(status, role).filter(
+    (target) =>
+      !isFinance(role) ||
+      ["APPROVED", "REJECTED", "NEEDS_REVISION"].includes(target),
+  );
 }

@@ -46,6 +46,12 @@ test("database migration, finance workflow, RLS isolation, and turnover", async 
   await db.exec(
     await readFile("supabase/migrations/006_performance_indexes.sql", "utf8"),
   );
+  await db.exec(
+    await readFile("supabase/migrations/007_confidential_budgets.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile("supabase/migrations/007_confidential_budgets.sql", "utf8"),
+  );
   const q = async (sql: string, args: unknown[] = []) =>
     db.query<Record<string, any>>(sql, args);
   const cfo = "11111111-1111-4111-8111-111111111111",
@@ -472,7 +478,18 @@ test("database migration, finance workflow, RLS isolation, and turnover", async 
   assert.equal((await q(`select * from projects`)).rows.length, 1);
   assert.equal((await q(`select * from project_departments`)).rows.length, 1);
   assert.equal((await q(`select * from project_members`)).rows.length, 1);
-  assert.equal((await q(`select * from department_financials`)).rows.length, 1);
+  assert.equal((await q(`select * from department_financials`)).rows.length, 0);
+  assert.equal((await q(`select * from department_budgets`)).rows.length, 0);
+  assert.equal((await q(`select * from budget_adjustments`)).rows.length, 0);
+  const visibleTotals = (await q(`select * from department_request_totals`))
+    .rows;
+  assert(visibleTotals.every((row) => row.department_id === dept));
+  const expectedTotal = (
+    await q(
+      `select sum(amount) total from requests where status not in ('DRAFT','CANCELLED')`,
+    )
+  ).rows[0].total;
+  assert.equal(visibleTotals[0]?.total_requested, expectedTotal);
   assert.equal((await q(`select * from request_comments`)).rows.length, 1);
   await assert.rejects(
     q(`update department_budgets set initial_approved_budget=99999`),
@@ -523,7 +540,7 @@ test("database migration, finance workflow, RLS isolation, and turnover", async 
   await db.exec(
     `set test.email='enrolled@gmail.com';set test.uid='${gmail}';set role authenticated;`,
   );
-  assert.equal((await q(`select * from department_financials`)).rows.length, 1);
+  assert.equal((await q(`select * from department_financials`)).rows.length, 0);
   assert.equal(
     (await q(`select * from requests where id=$1`, [gmailRequest.id])).rows
       .length,
@@ -565,7 +582,7 @@ test("database migration, finance workflow, RLS isolation, and turnover", async 
   assert.equal(registration.email, "new.member@student.ateneo.edu");
   assert.equal(registration.user_id, registered);
   assert.equal(registration.role, "DEPARTMENT_MEMBER");
-  assert.equal((await q(`select * from department_financials`)).rows.length, 1);
+  assert.equal((await q(`select * from department_financials`)).rows.length, 0);
   await assert.rejects(
     q(`select register_member($1,'Another registration',null)`, [other]),
     /already has a membership/,
@@ -692,5 +709,99 @@ test("database migration, finance workflow, RLS isolation, and turnover", async 
     }),
     /closed and read-only/,
   );
+  await assert.rejects(
+    q(`select set_department_budget($1,$2)`, [
+      cfo,
+      JSON.stringify({
+        fiscal_year_id: year,
+        department_id: dept,
+        amount: "20000",
+        expected_budget: "1",
+        reason: "Closed year test",
+        idempotency_key: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      }),
+    ]),
+    /closed and read-only/,
+  );
+  await q(`update fiscal_years set is_closed=false where id=$1`, [year]);
+  const beforeBudget = (
+    await q(
+      `select * from department_financials where fiscal_year_id=$1 and department_id=$2`,
+      [year, dept],
+    )
+  ).rows[0];
+  const budgetInput = {
+    fiscal_year_id: year,
+    department_id: dept,
+    amount: "200000",
+    expected_budget: String(beforeBudget.current_budget),
+    reason: "Approved allocation update",
+    idempotency_key: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+  };
+  await assert.rejects(
+    q(`select set_department_budget($1,$2)`, [
+      member,
+      JSON.stringify(budgetInput),
+    ]),
+    /Permission denied/,
+  );
+  await assert.rejects(
+    q(`select set_department_budget($1,$2)`, [
+      ocfo,
+      JSON.stringify(budgetInput),
+    ]),
+    /Permission denied/,
+  );
+  await assert.rejects(
+    q(`select set_department_budget($1,$2)`, [
+      cfo,
+      JSON.stringify({ ...budgetInput, amount: "0" }),
+    ]),
+    /below recorded/,
+  );
+  await q(`select set_department_budget($1,$2)`, [
+    cfo,
+    JSON.stringify(budgetInput),
+  ]);
+  const afterBudget = (
+    await q(
+      `select * from department_financials where fiscal_year_id=$1 and department_id=$2`,
+      [year, dept],
+    )
+  ).rows[0];
+  assert.equal(afterBudget.current_budget, "200000.00");
+  assert.equal(
+    afterBudget.initial_approved_budget,
+    beforeBudget.initial_approved_budget,
+  );
+  assert.equal(afterBudget.actual_expenses, beforeBudget.actual_expenses);
+  assert.equal(afterBudget.active_commitments, beforeBudget.active_commitments);
+  assert.equal(
+    (
+      await q(
+        `select count(*)::int n from audit_logs where action='SET_DEPARTMENT_BUDGET'`,
+      )
+    ).rows[0].n,
+    1,
+  );
+  await assert.rejects(
+    q(`select set_department_budget($1,$2)`, [
+      cfo,
+      JSON.stringify(budgetInput),
+    ]),
+    /budget changed/,
+  );
+  await db.exec(
+    `set test.email='cfo@student.ateneo.edu';set test.uid='${cfo}';set role authenticated;`,
+  );
+  assert((await q(`select * from department_financials`)).rows.length > 0);
+  await assert.rejects(
+    q(`select set_department_budget($1,$2)`, [
+      cfo,
+      JSON.stringify(budgetInput),
+    ]),
+    /permission denied/,
+  );
+  await db.exec(`reset role;`);
   await db.close();
 });

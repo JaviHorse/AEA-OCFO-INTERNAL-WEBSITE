@@ -1,6 +1,10 @@
 ﻿"use client";
 import { useState } from "react";
-export function LoginButton({ label = "Continue with Google" }: { label?: string }) {
+export function LoginButton({
+  label = "Continue with Google",
+}: {
+  label?: string;
+}) {
   const [loading, setLoading] = useState(false);
   return (
     <form

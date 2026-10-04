@@ -2,19 +2,55 @@ import type { FinanceRequest, RequestType } from "./types";
 import { cents } from "./finance";
 import { requestDecision } from "./request-decisions";
 
-export function requestTypeSummaries(requests: FinanceRequest[], types: RequestType[]) {
-  const submitted = requests.filter(r => r.status !== "DRAFT");
-  const allTypes = new Map(types.map(type => [type.id, type]));
-  for (const request of submitted) if (!allTypes.has(request.request_type_id)) {
-    allTypes.set(request.request_type_id, { id: request.request_type_id, code: "", name: "Archived request type", is_active: false } as RequestType);
-  }
-  return [...allTypes.values()].map(type => {
-    const records = submitted.filter(r => r.request_type_id === type.id)
-      .sort((a, b) => (b.submitted_at ?? b.created_at).localeCompare(a.submitted_at ?? a.created_at));
-    const count = (decision: string) => records.filter(r => requestDecision(r.status) === decision).length;
-    return { type, records, count: records.length, amount: records.reduce((n, r) => n + cents(r.amount), 0n),
-      approved: count("APPROVED"), rejected: count("REJECTED"), incomplete: count("NEEDS_REVISION"),
-      pending: records.filter(r => !requestDecision(r.status) && r.status !== "CANCELLED").length,
-      withdrawn: records.filter(r => r.status === "CANCELLED").length };
+export type ReportRequest = Pick<
+  FinanceRequest,
+  "request_type_id" | "status" | "amount"
+>;
+export function requestSummaryAccumulator(types: RequestType[]) {
+  const make = (type: RequestType) => ({
+    type,
+    count: 0,
+    amount: 0n,
+    approved: 0,
+    rejected: 0,
+    incomplete: 0,
+    pending: 0,
+    withdrawn: 0,
   });
+  const groups = new Map(types.map((t) => [t.id, make(t)]));
+  return {
+    add(records: ReportRequest[]) {
+      for (const r of records) {
+        if (r.status === "DRAFT") continue;
+        if (!groups.has(r.request_type_id))
+          groups.set(
+            r.request_type_id,
+            make({
+              id: r.request_type_id,
+              code: "",
+              name: "Archived request type",
+              is_active: false,
+            } as RequestType),
+          );
+        const group = groups.get(r.request_type_id)!;
+        group.count++;
+        group.amount += cents(r.amount);
+        const decision = requestDecision(r.status);
+        if (decision === "APPROVED") group.approved++;
+        else if (decision === "REJECTED") group.rejected++;
+        else if (decision === "NEEDS_REVISION") group.incomplete++;
+        else if (r.status === "CANCELLED") group.withdrawn++;
+        else group.pending++;
+      }
+    },
+    values: () => [...groups.values()],
+  };
+}
+export function requestTypeSummaries(
+  requests: ReportRequest[],
+  types: RequestType[],
+) {
+  const summary = requestSummaryAccumulator(types);
+  summary.add(requests);
+  return summary.values();
 }

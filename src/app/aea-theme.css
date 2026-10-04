@@ -1,0 +1,1389 @@
+/* AEA's brandbook palette. Shared presentation only; workflow styles remain in globals.css. */
+@font-face {
+  font-family: Lato;
+  src: url("/fonts/lato-400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: Lato;
+  src: url("/fonts/lato-700.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: Lato;
+  src: url("/fonts/lato-900.woff2") format("woff2");
+  font-weight: 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "League Gothic";
+  src: url("/fonts/league-gothic-400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  --aea-navy: #1e2c45;
+  --aea-orange: #ff7602;
+  --aea-yellow: #ffe497;
+  --aea-blue: #4587e5;
+  --aea-lilac: #ad81f0;
+  --aea-pink: #d973ae;
+  --ink: var(--aea-navy);
+  --muted: #606b80;
+  --canvas: #fbf9ed;
+  --border: #e3e4de;
+  --green: var(--aea-navy);
+  --green-deep: #111d32;
+  --font-sans: Lato, Arial, sans-serif;
+  --gold: var(--aea-orange);
+  --aea-shadow: 0 4px 0 #1e2c4506, 0 12px 28px #1e2c4505;
+}
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.65;
+  background: var(--canvas);
+}
+h1 {
+  font-family: "League Gothic", "Arial Narrow", sans-serif;
+  font-size: clamp(38px, 4vw, 54px);
+  font-weight: 400;
+  line-height: 1.07;
+  letter-spacing: 0.15px;
+  color: var(--ink);
+}
+h2,
+h3 {
+  font-family: var(--font-sans);
+  font-weight: 900;
+  color: var(--ink);
+}
+h2 {
+  font-size: 17px;
+  letter-spacing: -0.3px;
+}
+h3 {
+  font-size: 16px;
+}
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-sans);
+}
+::selection {
+  background: var(--aea-yellow);
+  color: var(--ink);
+}
+:focus-visible {
+  outline: 3px solid #2767bb;
+  outline-offset: 4px;
+}
+.aea-logo {
+  display: block;
+  width: 154px;
+  height: auto;
+  max-width: 100%;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.mobile-brand-logo {
+  display: none;
+}
+.aea-mascots {
+  display: inline-flex;
+  align-items: flex-end;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+.aea-mascots img {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+}
+.aea-mascots img + img {
+  margin-left: -30px;
+  transform: rotate(7deg);
+}
+.aea-mascots img:first-child {
+  transform: rotate(-7deg);
+}
+
+/* A clear, permanent navigation rail with the real association logo. */
+.sidebar {
+  width: 248px;
+  padding: 24px 16px 18px;
+  background: var(--aea-navy);
+  border: 0;
+  color: white;
+}
+.sidebar .brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 12px 15px;
+  margin: 0 8px 24px;
+  background: white;
+  border-radius: 16px;
+  color: var(--ink);
+  box-shadow: 0 5px 0 #00000016;
+}
+.brand-sub {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 2.6px;
+  margin: 0;
+  color: var(--ink);
+}
+.nav-label {
+  color: #b8c5dc;
+  font-size: 10px;
+  letter-spacing: 1.8px;
+  font-weight: 700;
+  margin: 19px 0 7px;
+  padding: 0 16px;
+}
+.nav-item {
+  min-height: 45px;
+  padding: 11px 14px;
+  margin: 5px 0;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  color: #e2e8f3;
+  font-size: 13px;
+  font-weight: 700;
+  transition:
+    background 0.16s,
+    color 0.16s,
+    border-color 0.16s;
+}
+.nav-item svg {
+  stroke-width: 1.8;
+  flex-shrink: 0;
+}
+.nav-item:hover {
+  background: #ffffff0d;
+  border-color: #ffffff1f;
+  color: white;
+}
+.nav-item.active {
+  background: var(--aea-yellow);
+  border-color: var(--aea-yellow);
+  color: var(--ink);
+  box-shadow: 0 3px 0 #00000014;
+  font-weight: 900;
+}
+.portal-identity {
+  border-top: 1px solid #ffffff22;
+  padding-top: 16px;
+}
+.portal-identity .nav-item {
+  background: transparent;
+  color: #e2e8f3;
+}
+.portal-identity .nav-item:hover {
+  background: #ffffff0d;
+}
+.portal-identity small {
+  font-size: 11px;
+  opacity: 1;
+  color: #b8c5dc;
+}
+.avatar {
+  width: 35px;
+  height: 35px;
+  border-radius: 11px;
+  background: #ad81f0;
+  color: var(--ink);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.main-area {
+  margin-left: 248px;
+  width: calc(100% - 248px);
+  min-width: 0;
+}
+.topbar {
+  height: 80px;
+  padding: 0 40px;
+  background: #fffef8;
+  border-bottom: 1px solid var(--border);
+}
+.workspace-label {
+  font-size: 10px;
+  font-weight: 900;
+  color: #606b80;
+  letter-spacing: 1.6px;
+}
+.year-select {
+  gap: 12px;
+  padding: 7px 12px;
+  background: white;
+  border-radius: 11px;
+  border-color: #d9deea;
+}
+.year-select > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.year-select select {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  appearance: auto;
+  padding: 5px 0;
+}
+.mobile-toggle {
+  color: var(--ink);
+  border-radius: 9px;
+}
+.main-content {
+  padding: 34px 40px 20px;
+  max-width: 1520px;
+}
+.page-heading {
+  margin: 0 0 28px;
+  padding: 6px 0 25px;
+  border-bottom: 1px solid #e3e4de;
+  align-items: center;
+}
+.page-heading > div:first-child {
+  min-width: 0;
+}
+.page-heading h1 {
+  margin-bottom: 8px;
+  overflow-wrap: anywhere;
+}
+.page-heading p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.page-heading-aside {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-shrink: 0;
+}
+.heading-mascots {
+  width: 106px;
+  margin-right: -12px;
+}
+.heading-mascots img {
+  width: 76px;
+  height: 76px;
+}
+.eyebrow,
+.page-heading .eyebrow {
+  font-size: 10px;
+  letter-spacing: 1.6px;
+  color: #815211;
+  font-weight: 900;
+  margin-bottom: 10px;
+}
+.content-footer {
+  align-items: center;
+  color: var(--muted);
+  font-size: 11px;
+  border-top: 1px solid var(--border);
+  margin-top: 36px;
+  padding: 12px 0;
+}
+.footer-mascots img {
+  width: 64px;
+  height: 64px;
+}
+.footer-mascots img + img {
+  margin-left: -20px;
+}
+
+/* Tactile buttons, crisp inputs, and consistent accessible feedback. */
+.button {
+  min-height: 43px;
+  border-radius: 10px;
+  padding: 11px 17px;
+  font-size: 13px;
+  font-weight: 900;
+  border-width: 1px;
+  box-shadow: 0 3px 0 #1e2c4510;
+  transition:
+    background 0.16s,
+    box-shadow 0.16s,
+    transform 0.16s;
+}
+.button.primary {
+  color: #1e2c45;
+  background: var(--aea-orange);
+  border-color: #e96a00;
+  box-shadow: 0 3px 0 #b5520b;
+}
+.button.primary:hover {
+  background: #ff902f;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 0 #b5520b;
+}
+.button.secondary {
+  color: var(--ink);
+  border-color: #ccd3df;
+  background: #fff;
+}
+.button.secondary:hover {
+  border-color: var(--aea-blue);
+  background: #f2f6ff;
+  transform: translateY(-1px);
+}
+.button:active {
+  transform: translateY(2px);
+  box-shadow: none;
+}
+.button:disabled {
+  transform: none;
+  box-shadow: none;
+}
+.button.danger {
+  background: #fff1f0;
+  border-color: #e4b2b0;
+  color: #a32c38;
+}
+.text-link {
+  color: #235ca8;
+  font-size: 12px;
+  font-weight: 900;
+  text-underline-offset: 4px;
+}
+.text-link:hover {
+  text-decoration: underline;
+}
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  border-color: #cdd4df;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  min-height: 44px;
+  padding: 10px 12px;
+  font-size: 14px;
+  transition:
+    border-color 0.16s,
+    box-shadow 0.16s;
+}
+input::placeholder,
+textarea::placeholder {
+  color: #788398;
+}
+input:not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,
+textarea:focus {
+  border-color: var(--aea-blue);
+  box-shadow: 0 0 0 3px #4587e515;
+}
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: #235ca8;
+}
+.field > label,
+.field > span,
+.table-filters > label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #48556d;
+}
+.field > .field-control {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 0;
+}
+.field small,
+.subtle-note,
+.checklist-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+.table-filters {
+  gap: 16px;
+  padding: 20px;
+  background: #fffef8;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  margin-bottom: 18px;
+  align-items: end;
+}
+.table-filters > label:not(.search-field) {
+  gap: 7px;
+}
+.table-filters input,
+.table-filters select {
+  max-width: none;
+  font-size: 13px;
+  min-height: 42px;
+}
+.pagination {
+  color: var(--muted);
+  font-size: 12px;
+  gap: 10px;
+  margin: 18px 0;
+}
+.pagination .button {
+  min-height: 37px;
+  padding: 8px 14px;
+  font-size: 12px;
+}
+.google-button {
+  min-height: 50px;
+  border: 1px solid #cdd4df;
+  color: var(--ink);
+  border-radius: 11px;
+  font-weight: 700;
+  font-size: 14px;
+  box-shadow: 0 3px 0 #1e2c4510;
+}
+.google-button:hover {
+  background: #f3f6ff;
+  border-color: var(--aea-blue);
+}
+
+/* Color lives in the structure, while financial content remains easy to read. */
+.panel {
+  border-radius: 17px;
+  border-color: var(--border);
+  padding: 25px;
+  background: #fff;
+  box-shadow: var(--aea-shadow);
+  margin-bottom: 24px;
+}
+.panel-heading {
+  margin-bottom: 22px;
+  align-items: flex-start;
+}
+.panel-heading h2::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--aea-orange);
+  margin-right: 9px;
+  transform: rotate(-12deg);
+  vertical-align: 2px;
+}
+.panel-heading p {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 7px 0 0;
+}
+.metric-card {
+  background: #fff;
+  border-radius: 17px;
+  padding: 25px;
+  border: 1px solid var(--border);
+  box-shadow: var(--aea-shadow);
+}
+.metric-top {
+  color: #48556d;
+  font-size: 13px;
+  margin-bottom: 18px;
+}
+.metric-card > strong {
+  font-weight: 900;
+  font-size: clamp(27px, 2.6vw, 36px);
+  color: var(--ink);
+  letter-spacing: -1px;
+}
+.metric-card.highlight {
+  background: var(--aea-yellow);
+  color: var(--ink);
+  border-color: #efd48b;
+}
+.highlight .metric-top,
+.highlight small,
+.metric-card small {
+  color: #48556d;
+}
+.metric-icon {
+  background: #eef3fc;
+  color: #235ca8;
+  border-radius: 10px;
+}
+.highlight .metric-icon {
+  background: #ffffff77;
+  color: var(--ink);
+}
+.metric-decoration,
+.metric-decoration::after {
+  border-color: #1e2c4517;
+}
+.attention-queues {
+  gap: 16px;
+}
+.attention-queues .queue-card {
+  border: 1px solid #dbe5f7;
+  border-radius: 14px;
+  padding: 22px;
+  background: #edf4ff;
+  box-shadow: 0 3px 0 #4587e514;
+  transition:
+    transform 0.16s,
+    box-shadow 0.16s;
+}
+.attention-queues .queue-card:nth-child(2) {
+  background: #f2ebfc;
+  border-color: #e2d4f7;
+  box-shadow: 0 3px 0 #ad81f014;
+}
+.attention-queues .queue-card:nth-child(3) {
+  background: #fff2d2;
+  border-color: #f2dfaa;
+  box-shadow: 0 3px 0 #ffe49744;
+}
+.attention-queues .queue-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 0 #1e2c4512;
+}
+.queue-card > strong,
+.queue-empty strong {
+  font-family: "League Gothic", sans-serif;
+  font-size: 42px;
+  font-weight: 400;
+  color: var(--ink);
+  line-height: 1;
+}
+.attention-queues .queue-card > span {
+  font-size: 13px;
+  font-weight: 700;
+  color: #48556d;
+}
+.queue-empty {
+  opacity: 1;
+}
+.summary-grid {
+  gap: 16px;
+}
+.summary-grid > div {
+  background: #f8f9fc;
+  border: 1px solid #edf0f6;
+  border-radius: 12px;
+  padding: 18px 16px;
+}
+.summary-grid > div:nth-child(4) {
+  background: #fff5d8;
+  border-color: #f7e4ae;
+}
+.summary-grid small {
+  color: #606b80;
+  font-size: 12px;
+}
+.summary-grid strong {
+  font-size: clamp(19px, 2vw, 25px);
+  font-weight: 900;
+  color: var(--ink);
+  letter-spacing: -0.5px;
+}
+.table-wrap {
+  border: 1px solid #e1e5ec;
+  border-radius: 13px;
+  background: white;
+}
+.panel .table-wrap {
+  margin: 0;
+  width: 100%;
+}
+table {
+  font-size: 13px;
+}
+thead {
+  background: #f1f4fa;
+  color: #48556d;
+}
+.table-wrap th {
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 14px 16px;
+  border-color: #e1e5ec;
+  color: #48556d;
+}
+.table-wrap td {
+  padding: 18px 16px;
+  font-size: 13px;
+  color: #48556d;
+  border-color: #edf0f5;
+}
+tbody tr:hover {
+  background: #f8faff;
+}
+.table-wrap .request-title {
+  color: #235ca8;
+  font-size: 13px;
+  font-weight: 900;
+}
+.table-wrap .cell-sub {
+  font-size: 11px;
+  color: #606b80;
+}
+.money-cell {
+  color: var(--ink) !important;
+  font-weight: 900;
+}
+.dept-tag {
+  background: #edf4ff;
+  border-color: #dbe5f7;
+  color: #235ca8;
+  padding: 5px 8px;
+  font-size: 10px;
+  font-weight: 900;
+  border-radius: 6px;
+}
+.badge {
+  border-radius: 7px;
+  padding: 5px 9px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.3px;
+}
+.badge-approved,
+.badge-completed,
+.badge-copied,
+.badge-fulfilled,
+.badge-resolved,
+.badge-reviewed {
+  background: #e9f6ef;
+  color: #236347;
+}
+.badge-submitted,
+.badge-under_ocfo_review,
+.badge-processing,
+.badge-ready_for_cfo {
+  background: #eaf2ff;
+  color: #235ca8;
+}
+.badge-needs_revision,
+.badge-warning,
+.badge-high {
+  background: #fff1ce;
+  color: #855012;
+}
+.badge-rejected,
+.badge-critical,
+.badge-failed {
+  background: #ffecee;
+  color: #a32c38;
+}
+.department-cell strong,
+.large-money {
+  color: var(--ink);
+}
+.department-cell small {
+  color: var(--muted);
+}
+.dept-avatar {
+  background: #f0e9fc;
+  color: #633699;
+  border-radius: 9px;
+}
+.utilization i {
+  background: var(--aea-blue);
+}
+.health {
+  border-radius: 7px;
+}
+.alert {
+  border-radius: 12px;
+  background: #fff4d8;
+  border: 1px solid #ead7a5;
+  color: #70501f;
+  padding: 16px 18px;
+  font-size: 13px;
+}
+.alert.critical {
+  background: #fff0f1;
+  border-color: #eac3c8;
+  color: #a32c38;
+}
+.validation-success {
+  background: #eef7f1;
+  border: 1px solid #cce5d5;
+  border-radius: 12px;
+  color: #236347;
+}
+.integration-note {
+  background: #eff5ff;
+  border-color: #dbe5f7;
+  border-radius: 12px;
+  color: #48556d;
+}
+.integration-note strong {
+  color: var(--ink);
+}
+.integration-note code {
+  color: #235ca8;
+}
+.budget-explanation {
+  background: #fffef8;
+  border-color: #e3e4de;
+  border-radius: 12px;
+  color: var(--muted);
+}
+.budget-explanation summary {
+  color: var(--ink);
+  font-weight: 700;
+}
+.detail-list dt,
+.approval-balance dt,
+.next-step {
+  color: var(--muted);
+}
+.detail-list dd {
+  color: var(--ink);
+}
+.detail-list > div {
+  border-color: #edf0f5;
+}
+.approval-balance {
+  gap: 20px;
+}
+.approval-balance > div {
+  background: #f8f9fc;
+  padding: 14px 18px;
+  border-radius: 12px;
+}
+.comment {
+  border-radius: 12px;
+  border-color: #e1e5ec;
+}
+.comment-internal {
+  background: #f5f0fc;
+}
+.comment-visible {
+  background: #f0f6ff;
+}
+.timeline li::before {
+  background: var(--aea-blue);
+}
+.empty {
+  border-radius: 14px;
+  padding: 38px 24px;
+  background: #fafbfe;
+}
+.empty-icon {
+  border-radius: 13px;
+  color: #235ca8;
+  background: #eaf2ff;
+}
+.empty h3 {
+  color: var(--ink);
+}
+.empty p {
+  color: var(--muted);
+}
+
+/* Forms, review tabs, help cards and confirmation dialogs share one visual language. */
+.admin-tabs {
+  gap: 8px;
+}
+.admin-tabs a,
+.detail-sections .admin-tabs button {
+  border-radius: 9px;
+  background: #fff;
+  color: #48556d;
+  border: 1px solid #d9deea;
+  padding: 10px 15px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.admin-tabs a.active,
+.detail-sections .admin-tabs button.active {
+  background: var(--aea-navy);
+  border-color: var(--aea-navy);
+  color: white;
+}
+.admin-tabs a:hover,
+.detail-sections .admin-tabs button:hover {
+  border-color: var(--aea-blue);
+}
+.admin-subtabs {
+  gap: 16px;
+  font-size: 13px;
+}
+.admin-subtabs .active {
+  color: #235ca8;
+  border-color: var(--aea-orange);
+  font-weight: 900;
+}
+.help-disclosure,
+.entry-disclosure {
+  background: white;
+  border: 1px solid #e1e5ec;
+  border-radius: 14px;
+  margin-bottom: 16px;
+  box-shadow: var(--aea-shadow);
+}
+/* Keep all expanded content inside the same inset as its heading, including
+   sections without a disclosure-body wrapper and nested forms/panels. */
+details {
+  --disclosure-inset: 16px;
+  min-width: 0;
+  padding: 0;
+}
+.help-disclosure,
+.entry-disclosure {
+  --disclosure-inset: 22px;
+}
+details[open] {
+  padding: 0 var(--disclosure-inset) var(--disclosure-inset);
+}
+details > summary,
+.panel details > summary,
+.help-disclosure > summary,
+.entry-disclosure > summary {
+  padding: 19px var(--disclosure-inset);
+  width: auto;
+  font-weight: 700;
+  color: var(--ink);
+  font-size: 14px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+details[open] > summary {
+  margin: 0 calc(-1 * var(--disclosure-inset)) 16px;
+  border-bottom: 1px solid var(--border);
+}
+details > :not(summary) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+details > :not(summary):last-child {
+  margin-bottom: 0;
+}
+details > .panel,
+details > .disclosure-body > .panel {
+  padding: 0;
+  margin-bottom: 0;
+}
+.help-disclosure .panel {
+  box-shadow: none;
+}
+.disclosure-body {
+  padding: 0;
+}
+details > form,
+.disclosure-body > form {
+  margin-top: 16px;
+}
+@media (max-width: 700px) {
+  details,
+  .help-disclosure,
+  .entry-disclosure {
+    --disclosure-inset: 14px;
+  }
+}
+.guide-title {
+  font-family: "League Gothic", sans-serif;
+  font-size: 35px;
+}
+.guide-content {
+  color: #48556d;
+  font-size: 14px;
+}
+.guide-flow span {
+  color: var(--ink);
+  background: #f0e9fc;
+  border-radius: 8px;
+}
+.request-type-card {
+  border-radius: 13px;
+  padding: 20px;
+  border-color: #d9deea;
+  color: var(--ink);
+  transition:
+    border-color 0.16s,
+    background 0.16s;
+}
+.request-type-card:hover {
+  background: #f8faff;
+  border-color: var(--aea-blue);
+}
+.request-type-card.selected {
+  border-color: #235ca8;
+  background: #edf4ff;
+  box-shadow: 0 0 0 1px #235ca8;
+  padding: 20px;
+}
+.request-type-card strong {
+  color: var(--ink);
+  font-weight: 900;
+}
+.wizard-title,
+.section-title {
+  color: var(--ink);
+}
+.wizard-steps li {
+  color: #606b80;
+}
+.wizard-steps li > span {
+  border-radius: 9px;
+  background: #eef1f7;
+  color: #606b80;
+}
+.wizard-steps li.current {
+  color: #235ca8;
+}
+.wizard-steps li.current > span,
+.wizard-steps li.done > span {
+  background: #235ca8;
+  color: white;
+}
+.status-progress {
+  padding: 18px 20px;
+  border-radius: 12px;
+  background: #f3f6fc;
+}
+.status-progress li.done,
+.status-progress li.current {
+  color: #235ca8;
+}
+.status-progress li.current {
+  background: #e5edfb;
+  border-radius: 7px;
+}
+.conditional-note {
+  color: #855012;
+  background: #fff4d8;
+  border-radius: 9px;
+}
+.checklist li {
+  border-color: #edf0f5;
+}
+.check-box {
+  color: #235ca8;
+  border-color: #cad8ee;
+  background: #edf4ff;
+}
+.checklist a {
+  color: #235ca8;
+}
+.confirmation-dialog {
+  border: 1px solid #d9deea;
+  border-top: 5px solid var(--aea-orange);
+  border-radius: 18px;
+  box-shadow: 0 24px 80px #1e2c4533;
+  padding: 30px;
+  color: var(--ink);
+}
+.confirmation-dialog::backdrop {
+  background: #14223c88;
+  backdrop-filter: blur(3px);
+}
+.confirmation-dialog h2 {
+  font-size: 22px;
+}
+.skeleton {
+  background: #e8e7f0;
+  border-radius: 16px;
+}
+
+/* Account and system screens use the same identity as the authenticated workspace. */
+.account-page,
+.center-page {
+  background:
+    radial-gradient(circle at 8% 10%, #ffe49777, transparent 32%),
+    radial-gradient(circle at 94% 86%, #ad81f027, transparent 35%),
+    var(--canvas);
+}
+.account-card {
+  border: 1px solid #e1e5ec;
+  border-top: 5px solid var(--aea-orange);
+  border-radius: 21px;
+  box-shadow:
+    0 8px 0 #1e2c4505,
+    0 20px 65px #1e2c4508;
+  padding: clamp(26px, 5vw, 44px);
+  position: relative;
+}
+.account-card h1 {
+  font-size: 43px;
+  margin: 28px 0 14px;
+}
+.account-card > p {
+  color: #606b80;
+  font-size: 14px;
+}
+.portal-logo {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.portal-logo .aea-logo {
+  width: 154px;
+}
+.portal-logo > span {
+  font-size: 10px;
+  letter-spacing: 2px;
+  font-weight: 900;
+  color: #606b80;
+}
+.registration-invite {
+  border-color: #e1e5ec;
+}
+.account-mascots {
+  display: flex;
+  justify-content: center;
+  margin: 16px auto -15px;
+}
+.account-mascots img {
+  width: 76px;
+  height: 76px;
+}
+.denied {
+  width: min(100%, 550px);
+  border-top: 5px solid var(--aea-orange);
+  padding: 38px;
+}
+.denied > .aea-logo {
+  margin: 0 auto 24px;
+}
+.denied > svg {
+  color: #235ca8;
+}
+.denied h1 {
+  font-size: 42px;
+}
+.denied > a:last-child {
+  font-size: 13px;
+}
+.login-portal {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(380px, 520px);
+  align-items: stretch;
+  justify-items: stretch;
+  gap: 60px;
+  padding: 40px;
+  min-height: 100dvh;
+}
+.login-portal .account-card {
+  align-self: center;
+  width: 100%;
+  max-width: 520px;
+}
+.aea-welcome {
+  background: var(--aea-blue);
+  border-radius: 24px;
+  color: var(--ink);
+  padding: 38px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 650px;
+  overflow: hidden;
+  position: relative;
+  isolation: isolate;
+}
+.aea-welcome::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  height: 330px;
+  width: 330px;
+  border-radius: 50%;
+  background: var(--aea-yellow);
+  top: -120px;
+  right: -110px;
+}
+.aea-welcome::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  height: 240px;
+  width: 240px;
+  border-radius: 42px;
+  background: var(--aea-lilac);
+  transform: rotate(25deg);
+  bottom: -140px;
+  left: -70px;
+}
+.welcome-brand {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.welcome-brand .aea-logo {
+  width: 150px;
+  border-radius: 11px;
+  background: white;
+  padding: 7px;
+}
+.welcome-brand > span {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 1.4px;
+  max-width: 160px;
+  color: #122b50;
+}
+.welcome-message {
+  margin: 60px 0;
+}
+.welcome-kicker {
+  display: inline-block;
+  background: var(--aea-yellow);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 900;
+  transform: rotate(-2deg);
+}
+.welcome-message h2 {
+  font-family: "League Gothic", sans-serif;
+  font-size: clamp(72px, 8vw, 112px);
+  font-weight: 400;
+  line-height: 0.98;
+  margin: 24px 0;
+  letter-spacing: -0.5px;
+}
+.welcome-message h2 em {
+  font-style: normal;
+  color: #fff5d4;
+}
+.welcome-message p {
+  font-size: 16px;
+  line-height: 1.7;
+  color: #122b50;
+  margin: 0;
+}
+.welcome-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.welcome-bottom > span:first-child {
+  color: #122b50;
+  font-size: 12px;
+  font-weight: 700;
+}
+.welcome-bottom .aea-mascots {
+  background: #ffffff24;
+  border: 1px solid #ffffff33;
+  border-radius: 16px;
+  padding: 0 8px;
+}
+.welcome-bottom .aea-mascots img {
+  width: 110px;
+  height: 110px;
+}
+
+@media (max-width: 1200px) {
+  .sidebar {
+    width: 224px;
+  }
+  .main-area {
+    margin-left: 224px;
+    width: calc(100% - 224px);
+  }
+  .main-content {
+    padding: 28px;
+  }
+  .topbar {
+    padding: 0 28px;
+  }
+  .heading-mascots {
+    display: none;
+  }
+  .login-portal {
+    gap: 30px;
+    padding: 30px;
+  }
+  .aea-welcome {
+    padding: 30px;
+  }
+}
+@media (max-width: 960px) {
+  .login-portal {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 28px;
+    gap: 28px;
+  }
+  .aea-welcome {
+    min-height: 0;
+    padding: 26px;
+  }
+  .welcome-message {
+    margin: 28px 0;
+  }
+  .welcome-message h2 {
+    font-size: 72px;
+  }
+  .welcome-bottom {
+    display: none;
+  }
+  .login-portal .account-card {
+    justify-self: center;
+  }
+  .summary-grid strong {
+    font-size: 22px;
+  }
+}
+@media (max-width: 700px) {
+  .mobile-brand-logo {
+    display: block;
+    width: 72px;
+    height: auto;
+    border-radius: 5px;
+    background: white;
+  }
+  .content-footer span.aea-mascots {
+    display: inline-flex;
+  }
+  .sidebar {
+    width: 248px;
+  }
+  .main-area {
+    width: 100%;
+    margin-left: 0;
+  }
+  .topbar {
+    height: 70px;
+    padding: 0 18px;
+    gap: 10px;
+  }
+  .workspace-label {
+    font-size: 8px;
+    letter-spacing: 0.7px;
+  }
+  .year-select {
+    gap: 0;
+    padding: 5px 8px;
+  }
+  .year-select > span {
+    display: none;
+  }
+  .year-select select {
+    max-width: 160px;
+    font-size: 11px;
+    min-height: 32px;
+  }
+  .main-content {
+    padding: 24px 18px;
+  }
+  .page-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 16px;
+    padding-bottom: 20px;
+  }
+  .page-heading h1 {
+    font-size: 42px;
+  }
+  .page-heading-aside {
+    max-width: 100%;
+  }
+  .page-heading .button {
+    white-space: normal;
+    text-align: left;
+  }
+  .panel {
+    padding: 20px 16px;
+    border-radius: 15px;
+  }
+  .panel-heading {
+    flex-wrap: wrap;
+  }
+  .table-filters {
+    padding: 16px;
+    gap: 12px;
+  }
+  .table-filters > label:not(.search-field) {
+    flex: 1 1 130px;
+    min-width: 0;
+  }
+  .table-filters input,
+  .table-filters select {
+    width: 100%;
+  }
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .summary-grid > div {
+    padding: 14px 12px;
+    min-width: 0;
+  }
+  .summary-grid strong {
+    font-size: 20px;
+    overflow-wrap: anywhere;
+  }
+  .table-wrap th,
+  .table-wrap td {
+    padding: 14px 12px;
+  }
+  .confirmation-dialog {
+    padding: 24px;
+    width: calc(100% - 32px);
+  }
+  .login-portal {
+    padding: 18px;
+    gap: 20px;
+  }
+  .aea-welcome {
+    border-radius: 17px;
+    padding: 24px;
+  }
+  .welcome-brand > span {
+    font-size: 9px;
+  }
+  .welcome-brand .aea-logo {
+    width: 120px;
+  }
+  .welcome-message h2 {
+    font-size: 65px;
+  }
+  .welcome-message p {
+    font-size: 14px;
+  }
+  .account-card h1,
+  .denied h1 {
+    font-size: 38px;
+  }
+  .denied {
+    padding: 28px 22px;
+  }
+  .content-footer {
+    gap: 8px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+@media print {
+  .sidebar,
+  .topbar,
+  .aea-mascots,
+  .content-footer {
+    display: none;
+  }
+  .main-area {
+    width: 100%;
+    margin: 0;
+  }
+  body,
+  .main-content {
+    background: white;
+  }
+  .panel,
+  .metric-card {
+    box-shadow: none;
+    break-inside: avoid;
+  }
+}

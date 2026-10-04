@@ -75,7 +75,10 @@ export async function GET(request: NextRequest) {
         .eq("key", "allowed_email_domain")
         .maybeSingle();
       if (
-        !emailDomainAllowed(u.email, setting?.value ?? env().ALLOWED_EMAIL_DOMAIN)
+        !emailDomainAllowed(
+          u.email,
+          setting?.value ?? env().ALLOWED_EMAIL_DOMAIN,
+        )
       ) {
         await db.auth.signOut();
         return finish("/access-denied");

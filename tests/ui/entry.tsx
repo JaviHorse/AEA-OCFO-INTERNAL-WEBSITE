@@ -1,3 +1,8 @@
+import Requests from "../../src/app/(workspace)/requests/page";
+import Login from "../../src/app/login/page";
+import AccessDenied from "../../src/app/access-denied/page";
+import NotFound from "../../src/app/not-found";
+import ErrorPage from "../../src/app/error";
 import Projects from "../../src/app/(workspace)/projects/page";
 import ProjectDetail from "../../src/app/(workspace)/projects/[id]/page";
 import Departments from "../../src/app/(workspace)/departments/page";
@@ -11,7 +16,6 @@ import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Shell } from "../../src/components/shell";
 import { RequestForm } from "../../src/components/request-form";
-import { RequestTable } from "../../src/components/request-table";
 import Dashboard from "../../src/app/(workspace)/dashboard/page";
 import RequestDetail from "../../src/app/(workspace)/requests/[id]/page";
 import Admin from "../../src/app/(workspace)/admin/page";
@@ -26,6 +30,14 @@ function FixtureApp() {
     const page = params.get("page") ?? "dashboard";
     const searchParams = Promise.resolve(Object.fromEntries(params));
     const load = async () => {
+      if (page === "request-list") return Requests({ searchParams });
+      if (page === "login") return Login({ searchParams });
+      if (page === "denied") return AccessDenied();
+      if (page === "not-found") return NotFound();
+      if (page === "error")
+        return (
+          <ErrorPage error={new Error("Fixture error")} reset={() => {}} />
+        );
       if (page === "projects") return Projects({ searchParams });
       if (page === "project")
         return ProjectDetail({ params: Promise.resolve({ id: "project" }) });
@@ -48,19 +60,7 @@ function FixtureApp() {
         });
       if (page === "guide") return Guide({ searchParams });
       if (page === "admin") return Admin({ searchParams });
-      if (page === "requests")
-        return (
-          <RequestTable
-            requests={w.requests as any}
-            queue={w.role === "DEPARTMENT_MEMBER" ? "all" : "inbox"}
-            departments={w.departments}
-            types={w.requestTypes as any}
-            projects={w.projects as any}
-            finance={w.role !== "DEPARTMENT_MEMBER"}
-            initialStatus={params.get("filter") ?? ""}
-            yearId={w.year.id}
-          />
-        );
+      if (page === "requests") return Requests({ searchParams });
       return (
         <RequestForm
           yearId={w.year.id}
@@ -76,8 +76,14 @@ function FixtureApp() {
     load()
       .then(setContent)
       .catch((e) => setError(e.message));
+    // The fixture is selected by a full page navigation, once per mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  if (params.get("page") === "register")
+  if (
+    ["register", "login", "denied", "not-found", "error"].includes(
+      params.get("page") ?? "",
+    )
+  )
     return (
       <>
         {error ? (

@@ -124,7 +124,12 @@ export function WorkflowActions({
                   if (result.ok) {
                     setTarget("");
                     setNotes("");
-                    if (isFinance(role)) router.push(result.message ? "/approvals?notice=delivery-warning" : "/approvals");
+                    if (isFinance(role))
+                      router.push(
+                        result.message
+                          ? "/approvals?notice=delivery-warning"
+                          : "/approvals",
+                      );
                     router.refresh();
                   } else setError(result.message ?? "Decision failed.");
                 })

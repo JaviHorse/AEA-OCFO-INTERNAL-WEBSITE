@@ -38,6 +38,13 @@ test("request pagination and dashboard counters retain scope and avoid full-year
     module.exports,
   );
   const reads: { table: string; ops: any[] }[] = [];
+  let missingTotals = false;
+  let totalFailure = false;
+  const amounts = [
+    ...Array.from({ length: 500 }, () => ({ amount: "0.01" })),
+    { amount: "123.45" },
+    { amount: "-20.10" },
+  ];
   const fixture: any = {
     year: { id: "year" },
     role: "DEPARTMENT_MEMBER",
@@ -66,6 +73,24 @@ test("request pagination and dashboard counters retain scope and avoid full-year
         };
       q.then = (resolve: any) => {
         reads.push({ table, ops });
+        if (
+          table === "department_request_totals" &&
+          (missingTotals || totalFailure)
+        )
+          return Promise.resolve({
+            data: null,
+            error: { code: totalFailure ? "42501" : "PGRST205" },
+          }).then(resolve);
+        if (
+          table === "requests" &&
+          ops.some((o) => o[0] === "select" && o[1] === "amount")
+        ) {
+          const range = ops.find((o) => o[0] === "range");
+          return Promise.resolve({
+            data: amounts.slice(range[1], range[2] + 1),
+            error: null,
+          }).then(resolve);
+        }
         return Promise.resolve({ data: [], count: 42, error: null }).then(
           resolve,
         );
@@ -105,6 +130,58 @@ test("request pagination and dashboard counters retain scope and avoid full-year
       1,
       "removed requester filter must not query users",
     );
+    reads.length = 0;
+    await module.exports.getDashboardData();
+    const requestTotal = reads.find(
+      (r) => r.table === "department_request_totals",
+    );
+    assert(requestTotal);
+    assert(
+      requestTotal.ops.some(
+        (o) => o[0] === "eq" && o[1] === "fiscal_year_id" && o[2] === "year",
+      ),
+    );
+    assert(
+      requestTotal.ops.some(
+        (o) => o[0] === "in" && o[1] === "department_id" && o[2][0] === "dept",
+      ),
+    );
+    missingTotals = true;
+    reads.length = 0;
+    const fallbackDashboard = await module.exports.getDashboardData();
+    assert.deepEqual(fallbackDashboard.totalRequested, ["108.35"]);
+    const amountReads = reads.filter((r) =>
+      r.ops.some((o) => o[0] === "select" && o[1] === "amount"),
+    );
+    assert.equal(
+      amountReads.length,
+      3,
+      "sum all pages, including negative adjustments and exact cents",
+    );
+    for (const read of amountReads) {
+      assert(
+        read.ops.some(
+          (o) => o[0] === "eq" && o[1] === "fiscal_year_id" && o[2] === "year",
+        ),
+      );
+      assert(
+        read.ops.some(
+          (o) =>
+            o[0] === "in" && o[1] === "department_id" && o[2][0] === "dept",
+        ),
+      );
+      const states = read.ops.find(
+        (o) => o[0] === "in" && o[1] === "status",
+      )[2];
+      assert(!states.includes("DRAFT") && !states.includes("CANCELLED"));
+    }
+    assert(!reads.some((r) => r.table === "department_financials"));
+    totalFailure = true;
+    await assert.rejects(
+      module.exports.getDashboardData(),
+      /Request totals could not be loaded/,
+    );
+    totalFailure = missingTotals = false;
     fixture.role = fixture.yearRole = "CFO_ADMIN";
     reads.length = 0;
     await module.exports.getRequestListData({}, "decisions");

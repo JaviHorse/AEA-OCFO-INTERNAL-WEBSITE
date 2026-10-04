@@ -124,6 +124,16 @@ test("page loaders fetch selected datasets and retain department/request scoping
     );
     assert.deepEqual(result.transactions, []);
     reads.length = 0;
+    assert.deepEqual(
+      (await module.exports.workspace(undefined, ["financials"])).financials,
+      [],
+    );
+    assert.equal(
+      reads.length,
+      0,
+      "member renders must not query budget balances",
+    );
+    reads.length = 0;
     const detail = await module.exports.workspace(undefined, ["transactions"], {
       requestId: "r1",
       departmentId: "acads",

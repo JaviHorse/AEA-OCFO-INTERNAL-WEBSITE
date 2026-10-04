@@ -24,6 +24,41 @@ export type ActionResult = {
   id?: string;
   data?: unknown;
 };
+export async function setDepartmentBudget(
+  input: Record<string, unknown>,
+): Promise<ActionResult> {
+  try {
+    const p = z
+      .object({
+        fiscal_year_id: z.uuid(),
+        department_id: z.uuid(),
+        idempotency_key: z.uuid(),
+        amount: z.string().regex(/^\d{1,12}(\.\d{1,2})?$/),
+        expected_budget: z.string().regex(/^-?\d{1,12}(\.\d{1,2})?$/),
+        reason: z.string().trim().min(3).max(1000),
+      })
+      .parse(input);
+    const s = await requireFinance(p.fiscal_year_id, true);
+    const { error } = await serviceClient().rpc("set_department_budget", {
+      actor: s.user.id,
+      p,
+    });
+    if (error) throw new Error(error.message);
+    for (const path of [
+      "/admin",
+      "/dashboard",
+      "/departments",
+      "/approvals",
+      "/requests",
+    ])
+      revalidatePath(path);
+    revalidatePath("/departments/[id]", "page");
+    revalidatePath("/requests/[id]", "page");
+    return { ok: true };
+  } catch (e) {
+    return failure(e);
+  }
+}
 const text = (max = 4000) =>
   z
     .string()
@@ -96,6 +131,7 @@ async function rpc(command: string, p: Record<string, unknown>, admin = false) {
       if (command === "COMMENT") revalidatePath("/dashboard");
     } else {
       for (const path of [
+        "/admin",
         "/dashboard",
         "/requests",
         "/approvals",
@@ -378,7 +414,7 @@ async function adminActionImpl(
   input: Record<string, unknown>,
 ): Promise<ActionResult> {
   try {
-    const s = await requireFinance(undefined, true);
+    await requireFinance(undefined, true);
     const p = { ...input };
     const allowed = [
       "CREATE_YEAR",
@@ -426,7 +462,7 @@ async function adminActionImpl(
       if (["finance_notification_email", "resend_from_email"].includes(key))
         p.value = z.email().parse(input.value);
       else if (key === "notification_recipients")
-        p.value = z.array(z.email()).parse(input.value);
+        p.value = z.array(z.email()).max(50).parse(input.value);
       else if (key.endsWith("_days"))
         p.value = z.number().int().min(0).max(365).parse(input.value);
       else if (

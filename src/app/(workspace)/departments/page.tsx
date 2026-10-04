@@ -2,8 +2,8 @@ import { requireAdminPage } from "@/lib/auth";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { workspace } from "@/lib/data";
-import { PageHeader, Panel } from "@/components/ui";
-import { money, cents, isFinance } from "@/lib/finance";
+import { PageHeader } from "@/components/ui";
+import { cents, isFinance } from "@/lib/finance";
 export default async function Departments({
   searchParams,
 }: {

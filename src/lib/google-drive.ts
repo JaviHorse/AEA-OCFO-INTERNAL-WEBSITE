@@ -51,6 +51,7 @@ export async function getFileMetadata(
 export async function listFolderFiles(
   id: string,
   client?: Awaited<ReturnType<typeof driveClient>>,
+  previewLimit?: number,
 ) {
   const { api } = client ?? (await driveClient());
   const files: drive_v3.Schema$File[] = [];
@@ -64,14 +65,21 @@ export async function listFolderFiles(
             "nextPageToken,files(id,name,mimeType,webViewLink,modifiedTime,shortcutDetails)",
           supportsAllDrives: true,
           includeItemsFromAllDrives: true,
-          pageSize: 100,
+          pageSize: previewLimit ? Math.min(previewLimit, 100) : 100,
           pageToken,
         },
         { timeout: 15000, retry: false },
       ),
     );
     files.push(...(res.data.files ?? []));
+    if (previewLimit && files.length >= previewLimit)
+      return files.slice(0, previewLimit);
     pageToken = res.data.nextPageToken ?? undefined;
+    if (pageToken && files.length >= 2000)
+      throw new DriveError(
+        "TOO_LARGE",
+        "This folder contains too many files to validate. Use a folder containing only this request’s supporting documents.",
+      );
   } while (pageToken);
   return files;
 }

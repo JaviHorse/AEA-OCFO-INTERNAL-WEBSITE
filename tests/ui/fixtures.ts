@@ -245,6 +245,7 @@ export function getFixture() {
   };
   return {
     db,
+    historyCount: 1,
     user: {
       id: "applicant",
       email: "officer@example.edu",

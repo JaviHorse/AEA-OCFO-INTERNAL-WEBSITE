@@ -1,9 +1,14 @@
 import "server-only";
 import { workspace } from "./data";
 import { yearContext } from "./auth";
-import { isFinance } from "./finance";
+import { cents, isFinance } from "./finance";
 import { withTiming } from "./performance";
 import type { FinanceRequest } from "./types";
+import { queryPages } from "./query-pages";
+import {
+  requestSummaryAccumulator,
+  type ReportRequest,
+} from "./request-reports";
 
 import type { RequestFilters } from "./request-filters";
 export type { RequestFilters } from "./request-filters";
@@ -103,6 +108,45 @@ export async function getRequestListData(
     };
   });
 }
+async function requestedTotals(w: Awaited<ReturnType<typeof yearContext>>) {
+  const departments = w.yearMemberships
+    .filter((m) => m.role === "DEPARTMENT_MEMBER")
+    .slice(0, 1)
+    .map((m) => m.department_id);
+  if (!departments.length) return [];
+  const result = await w.db
+    .from("department_request_totals")
+    .select("total_requested")
+    .eq("fiscal_year_id", w.year.id)
+    .in("department_id", departments);
+  if (!result.error)
+    return (result.data ?? []).map((r) => String(r.total_requested));
+  // Existing databases may not yet have migration 007. Read only request amounts
+  // through the authenticated client and its RLS; never fall back to budgets.
+  if (!["42P01", "PGRST205"].includes(result.error.code))
+    throw new Error("Request totals could not be loaded.");
+  let total = 0n;
+  let offset = 0;
+  for (;;) {
+    const page = await w.db
+      .from("requests")
+      .select("amount")
+      .eq("fiscal_year_id", w.year.id)
+      .in("department_id", departments)
+      .in("status", [...inbox, ...decisions])
+      .order("id", { ascending: true })
+      .range(offset, offset + 499);
+    if (page.error) throw new Error("Request totals could not be loaded.");
+    const rows = page.data ?? [];
+    if (!rows.length) break;
+    for (const row of rows) total += cents(String(row.amount));
+    offset += rows.length;
+  }
+  const absolute = total < 0n ? -total : total;
+  return [
+    `${total < 0n ? "-" : ""}${absolute / 100n}.${String(absolute % 100n).padStart(2, "0")}`,
+  ];
+}
 export async function getDashboardData(year?: string) {
   return withTiming("dashboard.total", async () => {
     const w = await yearContext(year);
@@ -138,6 +182,7 @@ export async function getDashboardData(year?: string) {
       submitted,
       ready,
       revisionCount,
+      requested,
     ] = await Promise.all([
       references,
       scopedRequests(w, false)
@@ -156,6 +201,7 @@ export async function getDashboardData(year?: string) {
       finance ? count(["SUBMITTED"]) : Promise.resolve(0),
       finance ? count(["READY_FOR_CFO"]) : Promise.resolve(0),
       finance ? count(["NEEDS_REVISION"]) : Promise.resolve(0),
+      finance ? Promise.resolve([]) : requestedTotals(w),
     ]);
     if (recent.error || revisions.error)
       throw new Error("Recent requests could not be loaded.");
@@ -167,6 +213,25 @@ export async function getDashboardData(year?: string) {
       submitted,
       ready,
       revisionCount,
+      totalRequested: requested,
     };
   });
+}
+export async function getReportData(year?: string) {
+  const w = await workspace(year, ["departments", "requestTypes"]);
+  const summary = requestSummaryAccumulator(w.requestTypes);
+  for await (const rows of queryPages<ReportRequest>(
+    (from, to) =>
+      w.db
+        .from("requests")
+        .select("request_type_id,status,amount")
+        .eq("fiscal_year_id", w.year.id)
+        .neq("status", "DRAFT")
+        .order("id")
+        .range(from, to),
+    "Request summaries could not be loaded.",
+  )) {
+    summary.add(rows);
+  }
+  return { ...w, groups: summary.values() };
 }

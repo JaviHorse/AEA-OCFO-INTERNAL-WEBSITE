@@ -10,4 +10,7 @@ service-account*.json
 *.tsbuildinfo
 test-results/
 playwright-report/
-artifacts/ux-review/
+artifacts/
+coverage/
+out/
+*.log

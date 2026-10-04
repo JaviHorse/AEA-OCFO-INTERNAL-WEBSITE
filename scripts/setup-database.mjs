@@ -42,6 +42,9 @@ try {
   await client.query(
     await readFile("supabase/migrations/006_performance_indexes.sql", "utf8"),
   );
+  await client.query(
+    await readFile("supabase/migrations/007_confidential_budgets.sql", "utf8"),
+  );
   if (email && label && code && start && end) {
     const eligibility = await client.query(
       "select public.email_domain_allowed($1) allowed",

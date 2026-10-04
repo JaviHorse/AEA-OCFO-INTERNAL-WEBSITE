@@ -1,4 +1,5 @@
 "use client";
+import { AeaLogo, MascotPair } from "@/components/aea-brand";
 export default function ErrorPage({
   error,
   reset,
@@ -9,6 +10,7 @@ export default function ErrorPage({
   return (
     <main className="center-page">
       <div className="panel denied">
+        <AeaLogo />
         <h1>We couldn’t load this workspace.</h1>
         <p>Try again. If this continues, contact Finance.</p>
         {process.env.NODE_ENV === "development" ? (
@@ -28,6 +30,7 @@ export default function ErrorPage({
         >
           Contact Finance
         </a>
+        <MascotPair className="account-mascots" />
       </div>
     </main>
   );

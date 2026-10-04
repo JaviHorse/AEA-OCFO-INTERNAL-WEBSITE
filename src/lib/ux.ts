@@ -64,24 +64,36 @@ export function statusStage(status: Status) {
 export function nextStep(status: Status, admin: boolean) {
   const member: Record<Status, string> = {
     DRAFT: "Add your details and documents, then submit your request.",
-    SUBMITTED: "Finance will review the documents you submitted. No action is needed from you right now.",
-    UNDER_OCFO_REVIEW: "Finance is reviewing your submitted documents. No action is needed from you right now.",
-    NEEDS_REVISION: "Finance needs you to make changes before your request can continue. Read the feedback, update your request, and resubmit.",
-    READY_FOR_CFO: "Your request is waiting for Finance approval. No action is needed from you right now.",
+    SUBMITTED:
+      "Finance will review the documents you submitted. No action is needed from you right now.",
+    UNDER_OCFO_REVIEW:
+      "Finance is reviewing your submitted documents. No action is needed from you right now.",
+    NEEDS_REVISION:
+      "Finance needs you to make changes before your request can continue. Read the feedback, update your request, and resubmit.",
+    READY_FOR_CFO:
+      "Your request is waiting for Finance approval. No action is needed from you right now.",
     APPROVED: "Finance approved your request.",
     PROCESSING: "Finance approved your request.",
     COMPLETED: "Finance approved your request.",
-    REJECTED: "This request was not approved. Read the decision in its history.",
+    REJECTED:
+      "This request was not approved. Read the decision in its history.",
     CANCELLED: "This request was cancelled and is closed.",
   };
   if (!admin) return member[status];
-  return ({
-    DRAFT: "The member has not submitted this draft yet.",
-    SUBMITTED: "Begin review and check the submitted documents.",
-    UNDER_OCFO_REVIEW: "Verify the documents and leave feedback for the approving Administrator.",
-    NEEDS_REVISION: "Waiting for the applicant to update and resubmit this request.",
-    READY_FOR_CFO: "This request is ready for a Finance decision. Review the documents and budget impact before deciding.",
-  } as Partial<Record<Status, string>>)[status] ?? member[status];
+  return (
+    (
+      {
+        DRAFT: "The member has not submitted this draft yet.",
+        SUBMITTED: "Begin review and check the submitted documents.",
+        UNDER_OCFO_REVIEW:
+          "Verify the documents and leave feedback for the approving Administrator.",
+        NEEDS_REVISION:
+          "Waiting for the applicant to update and resubmit this request.",
+        READY_FOR_CFO:
+          "This request is ready for a Finance decision. Review the documents and budget impact before deciding.",
+      } as Partial<Record<Status, string>>
+    )[status] ?? member[status]
+  );
 }
 export function financialHealth(f: Financial, issues: Issue[]) {
   if (cents(f.available_funds) < 0n) return "Over Budget";

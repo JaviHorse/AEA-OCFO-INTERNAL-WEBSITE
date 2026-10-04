@@ -6,16 +6,19 @@ import { workspace } from "@/lib/data";
 import { money, human } from "@/lib/finance";
 import { PageHeader, Panel, Badge } from "@/components/ui";
 import { RequestTable } from "@/components/request-table";
+import { pageNumber } from "@/lib/page-data";
+import { HistoryPagination } from "@/components/history-pagination";
 export default async function DepartmentDetail({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ year?: string }>;
+  searchParams: Promise<{ year?: string; page?: string }>;
 }) {
   const { id } = await params;
   await requireAdminPage();
   const p = await searchParams;
+  const page = pageNumber(p.page);
   const w = await workspace(
     p.year,
     [
@@ -28,7 +31,7 @@ export default async function DepartmentDetail({
       "transactions",
       "issues",
     ],
-    { departmentId: id },
+    { departmentId: id, page },
   );
   const d = w.departments.find((d) => d.id === id);
   if (!d) notFound();
@@ -41,6 +44,12 @@ export default async function DepartmentDetail({
   return (
     <>
       <PageHeader eyebrow={d.code} title={d.name} />
+      <HistoryPagination
+        href={`/departments/${id}`}
+        year={w.year.id}
+        page={page}
+        count={w.historyCount}
+      />
       <Panel title="Financial position">
         <div className="summary-grid">
           {[
@@ -71,10 +80,9 @@ export default async function DepartmentDetail({
                     requests={w.requests.filter((r) => r.department_id === id)}
                     departments={[d]}
                     types={w.requestTypes}
-                    projects={w.projects}
+
                     yearId={w.year.id}
                     finance={true}
-                    readOnly={w.readOnly}
                   />
                 </Panel>
               </>

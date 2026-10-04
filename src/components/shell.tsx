@@ -9,11 +9,11 @@ import {
   ChartNoAxesCombined,
   BookOpen,
   Settings,
-  Landmark,
   LogOut,
   Menu,
   CheckCheck,
 } from "lucide-react";
+import { AeaLogo, MascotPair } from "./aea-brand";
 import { useState } from "react";
 import type { Role, Year } from "@/lib/types";
 import { isAdmin } from "@/lib/permissions";
@@ -69,12 +69,8 @@ export function Shell({
       )}
       <aside id="main-navigation" className={`sidebar ${open ? "open" : ""}`}>
         <Link href="/dashboard" className="brand">
-          <span className="brand-icon">
-            <Landmark size={23} />
-          </span>
-          <span>
-            AEA<span className="brand-sub">FINANCE</span>
-          </span>
+          <AeaLogo />
+          <span className="brand-sub">FINANCE PORTAL</span>
         </Link>
         <nav aria-label="Main navigation">
           {links.map(([label, url, Icon, group], index) => (
@@ -130,8 +126,13 @@ export function Shell({
             >
               <Menu />
             </button>
+            <AeaLogo className="mobile-brand-logo" />
+            <span className="workspace-label">
+              {admin ? "FINANCE WORKSPACE" : "MEMBER WORKSPACE"}
+            </span>
           </div>
           <label className="year-select">
+            <span>Academic year</span>
             <select
               aria-label="Fiscal year"
               value={selected?.id ?? ""}
@@ -159,7 +160,7 @@ export function Shell({
           {children}
           <footer className="content-footer">
             <span>Ateneo Economics Association</span>
-            <span>AEA Finance</span>
+            <MascotPair className="footer-mascots" />
           </footer>
         </main>
       </div>
