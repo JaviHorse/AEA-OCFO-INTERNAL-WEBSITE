@@ -10,6 +10,8 @@ const settingLabels: Record<string, string> = {
   allow_unlinked_transactions: "Allow transactions without a linked request",
 };
 import Link from "next/link";
+import { pageNumber } from "@/lib/page-data";
+import { ServerFilterForm } from "@/components/server-filter-form";
 import { redirect } from "next/navigation";
 import { human } from "@/lib/finance";
 import { requestTypeLabel } from "@/lib/ux";
@@ -20,9 +22,20 @@ import { AuditTable } from "@/components/audit-table";
 export default async function Admin({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{
+    tab?: string;
+    page?: string;
+    actor?: string;
+    entity?: string;
+    action?: string;
+    date?: string;
+    email?: string;
+  }>;
 }) {
-  const { tab = "years" } = await searchParams;
+  const params = await searchParams;
+  const { tab = "years" } = params;
+  const page = pageNumber(params.page);
+  const offset = (page - 1) * 50;
   const tabDatasets: Record<string, Dataset[]> = {
     years: ["years"],
     members: ["years", "departments"],
@@ -35,34 +48,77 @@ export default async function Admin({
   const w = await workspace(undefined, tabDatasets[tab] ?? []);
   if (w.role !== "CFO_ADMIN") redirect("/dashboard");
   const empty = Promise.resolve({ data: [], error: null });
+  const auditQuery = w.db
+    .from("audit_logs")
+    .select("*", { count: "exact" })
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false });
+  const memberQuery = w.db
+    .from("memberships")
+    .select("*", { count: "exact" })
+    .order("email")
+    .order("id");
+  if (params.email)
+    memberQuery.ilike(
+      "email",
+      `%${params.email.slice(0, 160).replace(/[%_]/g, "")}%`,
+    );
+  if (params.actor && /^[0-9a-f-]{36}$/i.test(params.actor))
+    auditQuery.eq("actor_user_id", params.actor);
+  if (params.entity)
+    auditQuery.ilike(
+      "entity_type",
+      `%${params.entity.slice(0, 80).replace(/[%_]/g, "")}%`,
+    );
+  if (params.action)
+    auditQuery.ilike(
+      "action",
+      `%${params.action.slice(0, 80).replace(/[%_]/g, "")}%`,
+    );
+  if (params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date))
+    auditQuery
+      .gte("created_at", `${params.date}T00:00:00`)
+      .lte("created_at", `${params.date}T23:59:59.999999`);
+  const pageHref = (next: number) => {
+    const query = new URLSearchParams();
+    for (const [k, v] of Object.entries(params))
+      if (v && k !== "page") query.set(k, v);
+    query.set("tab", tab);
+    query.set("page", String(next));
+    return `/admin?${query}`;
+  };
   const results = await Promise.all([
-    tab === "members"
-      ? w.db.from("memberships").select("*").order("email")
-      : empty,
+    tab === "members" ? memberQuery.range(offset, offset + 49) : empty,
     tab === "settings" ? w.db.from("organization_settings").select("*") : empty,
     tab === "notifications"
       ? w.db
           .from("notifications")
-          .select("*")
+          .select("*", { count: "exact" })
           .order("created_at", { ascending: false })
-          .limit(100)
+          .order("id", { ascending: false })
+          .range(offset, offset + 49)
       : empty,
-    tab === "audit"
-      ? w.db
-          .from("audit_logs")
-          .select("*")
-          .order("created_at", { ascending: false })
-          .limit(200)
-      : empty,
-    ["projects", "members"].includes(tab)
-      ? w.db.from("users").select("*")
-      : empty,
+    tab === "audit" ? auditQuery.range(offset, offset + 49) : empty,
+    tab === "projects" ? w.db.from("users").select("*") : empty,
   ]);
   for (const r of results)
     if (r.error) throw new Error("Admin records could not be loaded.");
-  const [members, settings, notifications, audit, users] = results.map(
+  const [members, settings, notifications, audit, projectUsers] = results.map(
     (r) => r.data ?? [],
   );
+  const memberUsers =
+    tab === "members" && members.length
+      ? await w.db
+          .from("users")
+          .select("id,full_name,email")
+          .in("id", [...new Set(members.map((m) => m.user_id).filter(Boolean))])
+      : { data: [], error: null };
+  if (memberUsers.error)
+    throw new Error("Registered users could not be loaded.");
+  const users = tab === "members" ? (memberUsers.data ?? []) : projectUsers;
+  const total =
+    results[tab === "members" ? 0 : tab === "notifications" ? 2 : 3];
+  const count = "count" in total ? Number(total.count ?? 0) : 0;
   const values = Object.fromEntries(settings.map((s) => [s.key, s.value]));
   const departments = (
     <select name="department_id" required>
@@ -85,6 +141,54 @@ export default async function Admin({
   );
   return (
     <>
+      {["members", "audit"].includes(tab) && (
+        <ServerFilterForm key={JSON.stringify(params)}>
+          <input type="hidden" name="tab" value={tab} />
+          {tab === "members" ? (
+            <label>
+              Email
+              <input name="email" defaultValue={params.email} />
+            </label>
+          ) : (
+            <>
+              <label>
+                Actor ID
+                <input name="actor" defaultValue={params.actor} />
+              </label>
+              <label>
+                Entity
+                <input name="entity" defaultValue={params.entity} />
+              </label>
+              <label>
+                Action
+                <input name="action" defaultValue={params.action} />
+              </label>
+              <label>
+                Audit date
+                <input type="date" name="date" defaultValue={params.date} />
+              </label>
+            </>
+          )}
+        </ServerFilterForm>
+      )}
+      {["members", "audit", "notifications"].includes(tab) && (
+        <nav className="pagination" aria-label="Admin pages">
+          <span>
+            {count} records - Page {page} of{" "}
+            {Math.max(1, Math.ceil(count / 50))}
+          </span>
+          {page > 1 && (
+            <Link className="button secondary" href={pageHref(page - 1)}>
+              Previous
+            </Link>
+          )}
+          {page * 50 < count && (
+            <Link className="button secondary" href={pageHref(page + 1)}>
+              Next
+            </Link>
+          )}
+        </nav>
+      )}
       <PageHeader title="Administration" />
       <div className="admin-tabs">
         {[
@@ -791,7 +895,7 @@ export default async function Admin({
           title="Audit trail"
           subtitle="The latest 200 actions. Records are immutable for browser clients."
         >
-          <AuditTable records={audit} />
+          <AuditTable filters={false} records={audit} />
         </Panel>
       )}
     </>

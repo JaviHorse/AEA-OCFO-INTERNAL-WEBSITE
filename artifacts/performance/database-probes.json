@@ -1,0 +1,101 @@
+{
+  "context": "Service-role read-only probes, not authenticated route/RLS or EXPLAIN measurements. Baseline may be capped by PostgREST default row limit. First probe includes connection warmup.",
+  "measurements": [
+    {
+      "label": "baseline.requests.all",
+      "trial": 0,
+      "ms": 196,
+      "rows": 3,
+      "count": null,
+      "serializedBytes": 4097
+    },
+    {
+      "label": "optimized.requests.page",
+      "trial": 0,
+      "ms": 213.9,
+      "rows": 0,
+      "count": 0,
+      "serializedBytes": 2
+    },
+    {
+      "label": "optimized.dashboard.recent",
+      "trial": 0,
+      "ms": 112.7,
+      "rows": 3,
+      "count": null,
+      "serializedBytes": 1637
+    },
+    {
+      "label": "optimized.dashboard.counter",
+      "trial": 0,
+      "ms": 132,
+      "rows": 0,
+      "count": 0,
+      "serializedBytes": 4
+    },
+    {
+      "label": "baseline.requests.all",
+      "trial": 1,
+      "ms": 114.3,
+      "rows": 3,
+      "count": null,
+      "serializedBytes": 4097
+    },
+    {
+      "label": "optimized.requests.page",
+      "trial": 1,
+      "ms": 189.3,
+      "rows": 0,
+      "count": 0,
+      "serializedBytes": 2
+    },
+    {
+      "label": "optimized.dashboard.recent",
+      "trial": 1,
+      "ms": 121,
+      "rows": 3,
+      "count": null,
+      "serializedBytes": 1637
+    },
+    {
+      "label": "optimized.dashboard.counter",
+      "trial": 1,
+      "ms": 118.2,
+      "rows": 0,
+      "count": 0,
+      "serializedBytes": 4
+    },
+    {
+      "label": "baseline.requests.all",
+      "trial": 2,
+      "ms": 123.9,
+      "rows": 3,
+      "count": null,
+      "serializedBytes": 4097
+    },
+    {
+      "label": "optimized.requests.page",
+      "trial": 2,
+      "ms": 148,
+      "rows": 0,
+      "count": 0,
+      "serializedBytes": 2
+    },
+    {
+      "label": "optimized.dashboard.recent",
+      "trial": 2,
+      "ms": 133.2,
+      "rows": 3,
+      "count": null,
+      "serializedBytes": 1637
+    },
+    {
+      "label": "optimized.dashboard.counter",
+      "trial": 2,
+      "ms": 110,
+      "rows": 0,
+      "count": 0,
+      "serializedBytes": 4
+    }
+  ]
+}

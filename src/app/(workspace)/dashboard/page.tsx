@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { session } from "@/lib/auth";
-import { workspace } from "@/lib/data";
+import { getDashboardData } from "@/lib/page-data";
 import { cents, money, isFinance } from "@/lib/finance";
 import { requestTypeLabel } from "@/lib/ux";
 import { PageHeader, Panel } from "@/components/ui";
@@ -13,14 +12,7 @@ export default async function Dashboard({
   searchParams: Promise<{ year?: string }>;
 }) {
   const p = await searchParams;
-  const s = await session();
-  const w = await workspace(p.year, [
-    "departments",
-    "financials",
-    "requests",
-    "requestTypes",
-    ...(isFinance(s.role) ? ["issues" as const] : []),
-  ]);
+  const w = await getDashboardData(p.year);
   const admin = isFinance(w.role);
   const file = !admin && w.yearRole === "DEPARTMENT_MEMBER" && !w.readOnly;
   const requests = w.requests;
@@ -34,16 +26,8 @@ export default async function Dashboard({
       | "actual_revenue"
     >,
   ) => w.financials.reduce((sum, f) => sum + cents(f[key]), 0n);
-  const pending = requests.filter((r) =>
-    [
-      "SUBMITTED",
-      "UNDER_OCFO_REVIEW",
-      "READY_FOR_CFO",
-      "APPROVED",
-      "PROCESSING",
-    ].includes(r.status),
-  ).length;
-  const revisions = requests.filter((r) => r.status === "NEEDS_REVISION");
+  const pending = w.pending;
+  const revisions = w.revisions;
   const query = `year=${w.year.id}`;
   const name = String(
     w.user.user_metadata.full_name ?? w.user.email?.split("@")[0] ?? "Member",
@@ -91,19 +75,11 @@ export default async function Dashboard({
         ([label, value]) => label === "Available Budget" || value !== 0,
       ) as [string, string | number][]);
   const queues: [string, number, string][] = [
-    [
-      "New Requests",
-      requests.filter((r) => r.status === "SUBMITTED").length,
-      `/requests?${query}&status=SUBMITTED`,
-    ],
-    [
-      "For Approval",
-      requests.filter((r) => r.status === "READY_FOR_CFO").length,
-      `/requests?${query}&status=READY_FOR_CFO`,
-    ],
+    ["New Requests", w.submitted, `/requests?${query}&status=SUBMITTED`],
+    ["For Approval", w.ready, `/requests?${query}&status=READY_FOR_CFO`],
     [
       "Incomplete",
-      requests.filter(r => r.status === "NEEDS_REVISION").length,
+      w.revisionCount,
       `/approvals?${query}&status=NEEDS_REVISION`,
     ],
   ];

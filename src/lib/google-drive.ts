@@ -1,4 +1,5 @@
 import "server-only";
+import { withTiming } from "./performance";
 import { google, type drive_v3 } from "googleapis";
 import { googleAuth } from "./google-auth";
 import { extractDriveFolderId } from "./drive-url";
@@ -13,22 +14,32 @@ export class DriveError extends Error {
   }
 }
 export async function driveClient() {
-  const { auth, email } = await googleAuth(["https://www.googleapis.com/auth/drive.readonly"]);
+  const { auth, email } = await googleAuth([
+    "https://www.googleapis.com/auth/drive.readonly",
+  ]);
   return {
     api: google.drive({ version: "v3", auth }),
     email,
   };
 }
-export async function getFileMetadata(id: string) {
-  const { api } = await driveClient();
+export async function getFileMetadata(
+  id: string,
+  client?: Awaited<ReturnType<typeof driveClient>>,
+) {
+  const { api } = client ?? (await driveClient());
   try {
     return (
-      await api.files.get({
-        fileId: id,
-        fields:
-          "id,name,mimeType,webViewLink,modifiedTime,driveId,capabilities",
-        supportsAllDrives: true,
-      })
+      await withTiming("drive.metadata", () =>
+        api.files.get(
+          {
+            fileId: id,
+            fields:
+              "id,name,mimeType,webViewLink,modifiedTime,driveId,capabilities",
+            supportsAllDrives: true,
+          },
+          { timeout: 15000, retry: false },
+        ),
+      )
     ).data;
   } catch {
     throw new DriveError(
@@ -37,27 +48,38 @@ export async function getFileMetadata(id: string) {
     );
   }
 }
-export async function listFolderFiles(id: string) {
-  const { api } = await driveClient();
+export async function listFolderFiles(
+  id: string,
+  client?: Awaited<ReturnType<typeof driveClient>>,
+) {
+  const { api } = client ?? (await driveClient());
   const files: drive_v3.Schema$File[] = [];
   let pageToken: string | undefined;
   do {
-    const res = await api.files.list({
-      q: `'${id.replaceAll("'", "")}' in parents and trashed = false`,
-      fields:
-        "nextPageToken,files(id,name,mimeType,webViewLink,modifiedTime,shortcutDetails)",
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-      pageSize: 100,
-      pageToken,
-    });
+    const res = await withTiming("drive.files", () =>
+      api.files.list(
+        {
+          q: `'${id.replaceAll("'", "")}' in parents and trashed = false`,
+          fields:
+            "nextPageToken,files(id,name,mimeType,webViewLink,modifiedTime,shortcutDetails)",
+          supportsAllDrives: true,
+          includeItemsFromAllDrives: true,
+          pageSize: 100,
+          pageToken,
+        },
+        { timeout: 15000, retry: false },
+      ),
+    );
     files.push(...(res.data.files ?? []));
     pageToken = res.data.nextPageToken ?? undefined;
   } while (pageToken);
   return files;
 }
-export async function verifyFolderAccess(id: string) {
-  const meta = await getFileMetadata(id);
+export async function verifyFolderAccess(
+  id: string,
+  client?: Awaited<ReturnType<typeof driveClient>>,
+) {
+  const meta = await getFileMetadata(id, client);
   if (meta.mimeType !== FOLDER)
     throw new DriveError(
       "NOT_FOLDER",
@@ -67,8 +89,9 @@ export async function verifyFolderAccess(id: string) {
 }
 export async function validateSubmissionFolder(url: string) {
   const id = extractDriveFolderId(url);
-  const meta = await verifyFolderAccess(id);
-  const files = await listFolderFiles(id);
+  const client = await driveClient();
+  const meta = await verifyFolderAccess(id, client);
+  const files = await listFolderFiles(id, client);
   if (!files.length)
     throw new DriveError(
       "EMPTY",

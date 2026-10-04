@@ -22,8 +22,7 @@ export const session = cache(async function session() {
     admin.from("fiscal_years").select("*").eq("is_active", true).maybeSingle(),
   ]);
   const domain = settings?.value ?? env().ALLOWED_EMAIL_DOMAIN;
-  if (!emailDomainAllowed(user.email, domain))
-    redirect("/access-denied");
+  if (!emailDomainAllowed(user.email, domain)) redirect("/access-denied");
   if (error)
     throw new Error(
       "Database setup is incomplete. Apply the migration and seed in supabase/.",
@@ -67,19 +66,17 @@ export const yearContext = cache(async function yearContext(id?: string) {
       readOnly: s.activeYear.is_closed,
     };
   }
-  const { data: year } = await s.db
-    .from("fiscal_years")
-    .select("*")
-    .eq("id", yearId)
-    .maybeSingle();
+  const [{ data: year }, { data: memberships }] = await Promise.all([
+    s.db.from("fiscal_years").select("*").eq("id", yearId).maybeSingle(),
+    s.db
+      .from("memberships")
+      .select("*")
+      .eq("fiscal_year_id", yearId)
+      .eq("email", s.user.email!.toLowerCase())
+      .eq("is_active", true)
+      .order("id"),
+  ]);
   if (!year) redirect("/dashboard");
-  const { data: memberships } = await s.db
-    .from("memberships")
-    .select("*")
-    .eq("fiscal_year_id", yearId)
-    .eq("email", s.user.email!.toLowerCase())
-    .eq("is_active", true)
-    .order("id");
   const list = (memberships ?? []) as Membership[];
   const priority: Role[] = [
     "CFO_ADMIN",

@@ -1,4 +1,5 @@
 import "server-only";
+import { timedDatabaseFetch } from "../performance";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
@@ -10,6 +11,7 @@ export async function serverClient() {
     e.NEXT_PUBLIC_SUPABASE_URL,
     e.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
     {
+      global: { fetch: timedDatabaseFetch },
       cookies: {
         getAll: () => jar.getAll(),
         setAll(values) {
@@ -28,6 +30,7 @@ export async function serverClient() {
 export function serviceClient() {
   const e = env();
   return createClient(e.NEXT_PUBLIC_SUPABASE_URL, e.SUPABASE_SERVICE_ROLE_KEY, {
+    global: { fetch: timedDatabaseFetch },
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }

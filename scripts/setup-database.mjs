@@ -23,13 +23,30 @@ try {
     await client.query(
       await readFile("supabase/migrations/001_finance.sql", "utf8"),
     );
-  await client.query(await readFile("supabase/migrations/002_fix_project_rls.sql", "utf8"));
+  await client.query(
+    await readFile("supabase/migrations/002_fix_project_rls.sql", "utf8"),
+  );
   await client.query(await readFile("supabase/seed.sql", "utf8"));
-  await client.query(await readFile("supabase/migrations/003_allow_personal_gmail.sql", "utf8"));
-  await client.query(await readFile("supabase/migrations/004_portal_registration.sql", "utf8"));
-  await client.query(await readFile("supabase/migrations/005_google_sheets_register.sql", "utf8"));
+  await client.query(
+    await readFile("supabase/migrations/003_allow_personal_gmail.sql", "utf8"),
+  );
+  await client.query(
+    await readFile("supabase/migrations/004_portal_registration.sql", "utf8"),
+  );
+  await client.query(
+    await readFile(
+      "supabase/migrations/005_google_sheets_register.sql",
+      "utf8",
+    ),
+  );
+  await client.query(
+    await readFile("supabase/migrations/006_performance_indexes.sql", "utf8"),
+  );
   if (email && label && code && start && end) {
-    const eligibility = await client.query("select public.email_domain_allowed($1) allowed", [email]);
+    const eligibility = await client.query(
+      "select public.email_domain_allowed($1) allowed",
+      [email],
+    );
     if (!eligibility.rows[0].allowed || !/^\d{4}$/.test(code))
       throw new Error("Check initial CFO email and fiscal-year code.");
     await client.query("begin");

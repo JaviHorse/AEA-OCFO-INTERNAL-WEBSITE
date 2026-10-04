@@ -1,13 +1,12 @@
 "use server";
 import { z } from "zod";
+import { postCommit } from "@/lib/post-commit";
+import { withTiming } from "@/lib/performance";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { session, requireFinance, yearContext } from "@/lib/auth";
 import { serviceClient, serverClient } from "@/lib/supabase/server";
-import {
-  validateSubmissionFolder,
-  DriveError,
-} from "@/lib/google-drive";
+import { validateSubmissionFolder, DriveError } from "@/lib/google-drive";
 import { syncRequestRegister } from "@/lib/register-sync";
 import { extractDriveFolderId } from "@/lib/drive-url";
 import {
@@ -65,15 +64,52 @@ const failure = (e: unknown): ActionResult => ({
 });
 async function rpc(command: string, p: Record<string, unknown>, admin = false) {
   const s = await session();
-  const { data, error } = await serviceClient().rpc(
-    admin ? "admin_command" : "finance_command",
-    { actor: s.user.id, command, p },
+  const { data, error } = await withTiming(`action.rpc.${command}`, () =>
+    serviceClient().rpc(admin ? "admin_command" : "finance_command", {
+      actor: s.user.id,
+      command,
+      p,
+    }),
   );
   if (error) throw new Error(error.message);
-  revalidatePath("/", "layout");
+  if (admin) {
+    revalidatePath("/admin");
+    if (
+      ["ACTIVATE_YEAR", "CLOSE_YEAR", "MEMBERSHIP", "DEPARTMENT"].includes(
+        command,
+      )
+    )
+      revalidatePath("/", "layout");
+    else if (["REQUEST_TYPE", "REQUIREMENT"].includes(command)) {
+      revalidatePath("/guide");
+      revalidatePath("/requests/new");
+      revalidatePath("/requests/[id]", "page");
+    }
+  } else {
+    const request = data as Partial<FinanceRequest> | null;
+    const requestId =
+      command === "TRANSACTION" || command === "VERIFY_TRANSACTION"
+        ? p.request_id
+        : (request?.id ?? p.id);
+    if (typeof requestId === "string") revalidatePath(`/requests/${requestId}`);
+    if (["COMMENT", "REVIEW", "VERIFY_DOCUMENT"].includes(command)) {
+      if (command === "COMMENT") revalidatePath("/dashboard");
+    } else {
+      for (const path of [
+        "/dashboard",
+        "/requests",
+        "/approvals",
+        "/reports",
+        "/departments",
+      ])
+        revalidatePath(path);
+      revalidatePath("/departments/[id]", "page");
+      revalidatePath("/requests/[id]", "page");
+    }
+  }
   return data;
 }
-export async function validateDriveAction(url: string): Promise<ActionResult> {
+async function validateDriveActionImpl(url: string): Promise<ActionResult> {
   try {
     await session();
     return { ok: true, data: await validateSubmissionFolder(url) };
@@ -87,13 +123,15 @@ export async function validateDriveAction(url: string): Promise<ActionResult> {
     return { ok: false, message };
   }
 }
-export async function saveRequest(input: unknown): Promise<ActionResult> {
+async function saveRequestImpl(input: unknown): Promise<ActionResult> {
   try {
     const p = requestSchema.parse(input);
     const s = await yearContext(p.fiscal_year_id);
     assertCanFile(s.role);
     assertCanFile(s.yearRole);
-    const department = s.yearMemberships.find((m) => m.role === "DEPARTMENT_MEMBER");
+    const department = s.yearMemberships.find(
+      (m) => m.role === "DEPARTMENT_MEMBER",
+    );
     if (!department || department.department_id !== p.department_id)
       throw new Error("Requests must use your registered department.");
     if (s.readOnly) throw new Error("This year is read-only.");
@@ -116,17 +154,31 @@ export async function saveRequest(input: unknown): Promise<ActionResult> {
       source_folder_id: folderId ?? null,
     })) as FinanceRequest;
     if (p.submit) {
-      const recorded = await syncRequestRegister(r.id);
-      await Promise.all([
-        sendNewSubmissionNotification(r),
-        sendSubmissionConfirmation(r),
-      ]);
+      postCommit("submission.integrations", async () => {
+        const results = await Promise.allSettled([
+          syncRequestRegister(r.id),
+          sendNewSubmissionNotification(r),
+          sendSubmissionConfirmation(r),
+        ]);
+        if (
+          results.some(
+            (result) =>
+              result.status === "rejected" ||
+              (result.value &&
+                typeof result.value === "object" &&
+                "ok" in result.value &&
+                !result.value.ok),
+          )
+        )
+          console.error(
+            "[integration] Submission delivery pending; inspect notification history and Sheets retry queue.",
+          );
+      });
       return {
         ok: true,
         id: r.id,
-        message: recorded.ok
-          ? "Request submitted."
-          : "Request submitted. Sheets recording is pending; Finance can retry it from the request page.",
+        message:
+          "Request submitted. Notifications and Sheets recording continue in the background.",
       };
     }
     return { ok: true, id: r.id };
@@ -134,7 +186,7 @@ export async function saveRequest(input: unknown): Promise<ActionResult> {
     return failure(e);
   }
 }
-export async function requestAction(
+async function requestActionImpl(
   command: string,
   input: Record<string, unknown>,
 ): Promise<ActionResult> {
@@ -149,9 +201,16 @@ export async function requestAction(
     if (!allowed.includes(command)) throw new Error("Invalid action.");
     const id = uuid.parse(input.id);
     const s = await session();
-    if (["REVIEW", "VERIFY_DOCUMENT", "FLAG_ISSUE"].includes(command) && !isAdmin(s.role))
+    if (
+      ["REVIEW", "VERIFY_DOCUMENT", "FLAG_ISSUE"].includes(command) &&
+      !isAdmin(s.role)
+    )
       throw new Error("Finance Administrator access is required.");
-    if (command === "TRANSITION" && input.status !== "CANCELLED" && !isAdmin(s.role))
+    if (
+      command === "TRANSITION" &&
+      input.status !== "CANCELLED" &&
+      !isAdmin(s.role)
+    )
       throw new Error("Members cannot review or approve financial requests.");
     const { data: r } = await s.db
       .from("requests")
@@ -208,36 +267,51 @@ export async function requestAction(
       const changed = result as FinanceRequest;
       // The finance RPC has committed. Integration failures must not report
       // the saved decision as unsuccessful or prompt a duplicate decision.
-      const warning: string[] = [];
-      const [sheetResult, emailResult] = await Promise.allSettled([
-        syncRequestRegister(id), notifyEvent(String(p.status), changed),
-      ]);
-      if (sheetResult.status === "rejected" || !sheetResult.value.ok) warning.push("Sheets recording remains pending.");
-      if (emailResult.status === "rejected") warning.push("Email notification could not be sent.");
-      else if (emailResult.value && !emailResult.value.ok) warning.push(emailResult.value.message ?? "Email notification could not be sent.");
-      if (p.status === "APPROVED") {
-        try {
-        const { count } = await serviceClient()
-          .from("discrepancies")
-          .select("*", { count: "exact", head: true })
-          .eq("entity_id", id)
-          .eq("severity", "CRITICAL")
-          .eq("status", "OPEN");
-        if (count) await sendDiscrepancyAlert(changed);
-        } catch { warning.push("Finance alert could not be sent."); }
-      }
-      return { ok: true, message: warning.length ? warning.join(" ") : undefined };
+      postCommit("decision.integrations", async () => {
+        const results = await Promise.allSettled([
+          syncRequestRegister(id),
+          notifyEvent(String(p.status), changed),
+          p.status === "APPROVED"
+            ? (async () => {
+                const { count, error } = await serviceClient()
+                  .from("discrepancies")
+                  .select("id", { count: "exact", head: true })
+                  .eq("entity_id", id)
+                  .eq("severity", "CRITICAL")
+                  .eq("status", "OPEN");
+                if (error) throw new Error("Finance alert check failed.");
+                if (count) await sendDiscrepancyAlert(changed);
+              })()
+            : Promise.resolve(),
+        ]);
+        if (
+          results.some(
+            (r) =>
+              r.status === "rejected" ||
+              (r.value &&
+                typeof r.value === "object" &&
+                "ok" in r.value &&
+                !r.value.ok),
+          )
+        )
+          console.error(
+            "[integration] Decision delivery pending; inspect notification history and Sheets retry queue.",
+          );
+      });
+      return { ok: true };
     }
     if (command === "VERIFY_DOCUMENT" && !p.is_verified)
-      await notifyEvent("MISSING_REQUIRED_DOCUMENT", r);
+      postCommit("document.notification", () =>
+        notifyEvent("MISSING_REQUIRED_DOCUMENT", r),
+      );
     if (command === "FLAG_ISSUE" && p.severity === "CRITICAL")
-      await sendDiscrepancyAlert(r);
+      postCommit("issue.notification", () => sendDiscrepancyAlert(r));
     return { ok: true };
   } catch (e) {
     return failure(e);
   }
 }
-export async function recordTransaction(
+async function recordTransactionImpl(
   input: Record<string, unknown>,
 ): Promise<ActionResult> {
   try {
@@ -255,38 +329,51 @@ export async function recordTransaction(
     const p = schema.parse(input);
     await requireFinance(p.fiscal_year_id);
     await rpc("TRANSACTION", p);
-    if (p.request_id) {
-      const { data: r } = await serviceClient()
-        .from("requests")
-        .select("*")
-        .eq("id", p.request_id)
-        .single();
-      const { count } = await serviceClient()
-        .from("discrepancies")
-        .select("*", { head: true, count: "exact" })
-        .eq("entity_id", p.request_id)
-        .eq("severity", "CRITICAL")
-        .eq("status", "OPEN");
-      if (count && r) await sendDiscrepancyAlert(r);
-    }
+    if (p.request_id)
+      postCommit("transaction.alert", async () => {
+        const db = serviceClient();
+        const [{ data: r }, { count, error }] = await Promise.all([
+          db.from("requests").select("*").eq("id", p.request_id).single(),
+          db
+            .from("discrepancies")
+            .select("id", { head: true, count: "exact" })
+            .eq("entity_id", p.request_id)
+            .eq("severity", "CRITICAL")
+            .eq("status", "OPEN"),
+        ]);
+        if (error) throw new Error("Finance alert check failed.");
+        if (count && r) await sendDiscrepancyAlert(r);
+      });
     return { ok: true };
   } catch (e) {
     return failure(e);
   }
 }
-export async function retryRegisterSync(id: string): Promise<ActionResult> {
+async function retryRegisterSyncImpl(id: string): Promise<ActionResult> {
   try {
     uuid.parse(id);
     const s = await session();
-    const { data: r } = await s.db.from("requests").select("*").eq("id", id).single();
-    if (!r || !r.reference_code || r.status === "DRAFT") throw new Error("Submitted request not found.");
+    const { data: r } = await s.db
+      .from("requests")
+      .select("*")
+      .eq("id", id)
+      .single();
+    if (!r || !r.reference_code || r.status === "DRAFT")
+      throw new Error("Submitted request not found.");
     await requireFinance(r.fiscal_year_id);
     const result = await syncRequestRegister(id);
-    revalidatePath("/", "layout");
-    return { ok: result.ok, message: result.queued ? "Request queued for Sheets recording." : result.message ?? "Request register updated." };
-  } catch (e) { return failure(e); }
+    revalidatePath(`/requests/${id}`);
+    return {
+      ok: result.ok,
+      message: result.queued
+        ? "Request queued for Sheets recording."
+        : (result.message ?? "Request register updated."),
+    };
+  } catch (e) {
+    return failure(e);
+  }
 }
-export async function adminAction(
+async function adminActionImpl(
   command: string,
   input: Record<string, unknown>,
 ): Promise<ActionResult> {
@@ -397,22 +484,31 @@ export async function adminAction(
     return failure(e);
   }
 }
-export async function manageRegisteredUser(input: Record<string, unknown>): Promise<ActionResult> {
+async function manageRegisteredUserImpl(
+  input: Record<string, unknown>,
+): Promise<ActionResult> {
   try {
     const s = await requireFinance(undefined, true);
-    const p = z.object({
-      membership_id: uuid,
-      department_id: uuid,
-      enabled: z.boolean(),
-      promote: z.boolean().default(false),
-    }).parse(input);
-    const { error } = await serviceClient().rpc("manage_registered_user", { actor: s.user.id, ...p });
+    const p = z
+      .object({
+        membership_id: uuid,
+        department_id: uuid,
+        enabled: z.boolean(),
+        promote: z.boolean().default(false),
+      })
+      .parse(input);
+    const { error } = await serviceClient().rpc("manage_registered_user", {
+      actor: s.user.id,
+      ...p,
+    });
     if (error) throw new Error(error.message);
     revalidatePath("/", "layout");
     return { ok: true, message: "Account access updated." };
-  } catch (e) { return failure(e); }
+  } catch (e) {
+    return failure(e);
+  }
 }
-export async function saveGuide(
+async function saveGuideImpl(
   input: Record<string, unknown>,
 ): Promise<ActionResult> {
   try {
@@ -457,7 +553,7 @@ export async function saveGuide(
     return failure(e);
   }
 }
-export async function resolveIssue(
+async function resolveIssueImpl(
   input: Record<string, unknown>,
 ): Promise<ActionResult> {
   try {
@@ -471,7 +567,7 @@ export async function resolveIssue(
     return failure(e);
   }
 }
-export async function submitReport(
+async function submitReportImpl(
   input: Record<string, unknown>,
 ): Promise<ActionResult> {
   try {
@@ -499,7 +595,7 @@ export async function signOut() {
   await db.auth.signOut();
   redirect("/login");
 }
-export async function verifyRecord(
+async function verifyRecordImpl(
   kind: "transaction" | "report",
   id: string,
 ): Promise<ActionResult> {
@@ -513,4 +609,86 @@ export async function verifyRecord(
   } catch (e) {
     return failure(e);
   }
+}
+
+export async function validateDriveAction(
+  ...args: Parameters<typeof validateDriveActionImpl>
+): Promise<ActionResult> {
+  return withTiming("action.validateDriveAction.total", () =>
+    validateDriveActionImpl(...args),
+  );
+}
+
+export async function saveRequest(
+  ...args: Parameters<typeof saveRequestImpl>
+): Promise<ActionResult> {
+  return withTiming("action.saveRequest.total", () => saveRequestImpl(...args));
+}
+
+export async function requestAction(
+  ...args: Parameters<typeof requestActionImpl>
+): Promise<ActionResult> {
+  return withTiming("action.requestAction.total", () =>
+    requestActionImpl(...args),
+  );
+}
+
+export async function recordTransaction(
+  ...args: Parameters<typeof recordTransactionImpl>
+): Promise<ActionResult> {
+  return withTiming("action.recordTransaction.total", () =>
+    recordTransactionImpl(...args),
+  );
+}
+
+export async function retryRegisterSync(
+  ...args: Parameters<typeof retryRegisterSyncImpl>
+): Promise<ActionResult> {
+  return withTiming("action.retryRegisterSync.total", () =>
+    retryRegisterSyncImpl(...args),
+  );
+}
+
+export async function adminAction(
+  ...args: Parameters<typeof adminActionImpl>
+): Promise<ActionResult> {
+  return withTiming("action.adminAction.total", () => adminActionImpl(...args));
+}
+
+export async function manageRegisteredUser(
+  ...args: Parameters<typeof manageRegisteredUserImpl>
+): Promise<ActionResult> {
+  return withTiming("action.manageRegisteredUser.total", () =>
+    manageRegisteredUserImpl(...args),
+  );
+}
+
+export async function saveGuide(
+  ...args: Parameters<typeof saveGuideImpl>
+): Promise<ActionResult> {
+  return withTiming("action.saveGuide.total", () => saveGuideImpl(...args));
+}
+
+export async function resolveIssue(
+  ...args: Parameters<typeof resolveIssueImpl>
+): Promise<ActionResult> {
+  return withTiming("action.resolveIssue.total", () =>
+    resolveIssueImpl(...args),
+  );
+}
+
+export async function submitReport(
+  ...args: Parameters<typeof submitReportImpl>
+): Promise<ActionResult> {
+  return withTiming("action.submitReport.total", () =>
+    submitReportImpl(...args),
+  );
+}
+
+export async function verifyRecord(
+  ...args: Parameters<typeof verifyRecordImpl>
+): Promise<ActionResult> {
+  return withTiming("action.verifyRecord.total", () =>
+    verifyRecordImpl(...args),
+  );
 }

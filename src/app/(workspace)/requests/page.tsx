@@ -1,37 +1,20 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import { workspace } from "@/lib/data";
-import { PageHeader, Panel } from "@/components/ui";
+import { getRequestListData, type RequestFilters } from "@/lib/page-data";
+import { hasRequestFilters } from "@/lib/request-filters";
+import { RequestListControls } from "@/components/request-list-controls";
+import { PageHeader } from "@/components/ui";
 import { RequestTable } from "@/components/request-table";
 import { registerUrl } from "@/lib/request-register";
 import { isFinance } from "@/lib/finance";
 export default async function Requests({
   searchParams,
 }: {
-  searchParams: Promise<{
-    year?: string;
-    status?: string;
-    department?: string;
-    type?: string;
-    notice?: string;
-  }>;
+  searchParams: Promise<RequestFilters>;
 }) {
   const p = await searchParams;
-  const w = await workspace(p.year, [
-    "departments",
-    "requests",
-    "requestTypes",
-    "projects",
-  ]);
+  const w = await getRequestListData(p, "all");
   const finance = !!w.yearRole && isFinance(w.yearRole);
-  const { data: people, error: peopleError } =
-    finance && w.requests.length
-      ? await w.db
-          .from("users")
-          .select("id,full_name,email")
-          .in("id", [...new Set(w.requests.map((r) => r.requester_user_id))])
-      : { data: [], error: null };
-  if (peopleError) throw new Error("Requesters could not be loaded.");
   return (
     <>
       <PageHeader
@@ -45,7 +28,16 @@ export default async function Requests({
               <Plus size={16} />
               File New Request
             </Link>
-          ) : finance ? <a className="button secondary" href={registerUrl()} target="_blank" rel="noreferrer">Open Finance Register</a> : undefined
+          ) : finance ? (
+            <a
+              className="button secondary"
+              href={registerUrl()}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open Finance Register
+            </a>
+          ) : undefined
         }
       />
       {p.notice === "admin-review-only" && (
@@ -55,7 +47,20 @@ export default async function Requests({
         </p>
       )}
       <section className="request-list" aria-label="Requests">
+        <RequestListControls
+          key={JSON.stringify(p)}
+          params={{ ...p, year: w.year.id }}
+          departments={w.departments}
+          types={w.requestTypes}
+          projects={w.projects}
+          finance={finance}
+          count={w.count}
+          page={w.page}
+          queue={w.queue}
+        />
         <RequestTable
+          filteredEmpty={hasRequestFilters(p)}
+          filters={false}
           key={`${p.status ?? ""}-${p.department ?? ""}-${p.type ?? ""}-${w.year.id}`}
           requests={w.requests}
           queue={finance ? "inbox" : "all"}
@@ -65,14 +70,6 @@ export default async function Requests({
           yearId={w.year.id}
           finance={finance}
           readOnly={w.readOnly || w.yearRole !== "DEPARTMENT_MEMBER"}
-          initialStatus={p.status}
-          initialType={p.type}
-          initialDepartment={
-            w.departments.some((d) => d.id === p.department)
-              ? p.department
-              : undefined
-          }
-          people={people ?? []}
         />
       </section>
     </>

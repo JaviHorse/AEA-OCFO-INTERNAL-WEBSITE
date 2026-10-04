@@ -9,15 +9,43 @@ test("database migration, finance workflow, RLS isolation, and turnover", async 
   );
   await db.exec(await readFile("supabase/migrations/001_finance.sql", "utf8"));
   await db.exec(await readFile("supabase/seed.sql", "utf8"));
-  await db.exec(await readFile("supabase/migrations/002_fix_project_rls.sql", "utf8"));
+  await db.exec(
+    await readFile("supabase/migrations/002_fix_project_rls.sql", "utf8"),
+  );
   // The repair must also be safe to reapply.
-  await db.exec(await readFile("supabase/migrations/002_fix_project_rls.sql", "utf8"));
-  await db.exec(await readFile("supabase/migrations/003_allow_personal_gmail.sql", "utf8"));
-  await db.exec(await readFile("supabase/migrations/003_allow_personal_gmail.sql", "utf8"));
-  await db.exec(await readFile("supabase/migrations/004_portal_registration.sql", "utf8"));
-  await db.exec(await readFile("supabase/migrations/004_portal_registration.sql", "utf8"));
-  await db.exec(await readFile("supabase/migrations/005_google_sheets_register.sql", "utf8"));
-  await db.exec(await readFile("supabase/migrations/005_google_sheets_register.sql", "utf8"));
+  await db.exec(
+    await readFile("supabase/migrations/002_fix_project_rls.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile("supabase/migrations/003_allow_personal_gmail.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile("supabase/migrations/003_allow_personal_gmail.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile("supabase/migrations/004_portal_registration.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile("supabase/migrations/004_portal_registration.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile(
+      "supabase/migrations/005_google_sheets_register.sql",
+      "utf8",
+    ),
+  );
+  await db.exec(
+    await readFile(
+      "supabase/migrations/005_google_sheets_register.sql",
+      "utf8",
+    ),
+  );
+  await db.exec(
+    await readFile("supabase/migrations/006_performance_indexes.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile("supabase/migrations/006_performance_indexes.sql", "utf8"),
+  );
   const q = async (sql: string, args: unknown[] = []) =>
     db.query<Record<string, any>>(sql, args);
   const cfo = "11111111-1111-4111-8111-111111111111",
@@ -43,8 +71,14 @@ test("database migration, finance workflow, RLS isolation, and turnover", async 
     [cfo, member, ocfo, year, dept],
   );
   await q(`insert into auth.users values($1)`, [otherMember]);
-  await q(`insert into public.users(id,email) values($1,'other@student.ateneo.edu')`, [otherMember]);
-  await q(`insert into memberships(user_id,email,fiscal_year_id,department_id,role) values($1,'other@student.ateneo.edu',$2,$3,'DEPARTMENT_MEMBER')`, [otherMember, year, other]);
+  await q(
+    `insert into public.users(id,email) values($1,'other@student.ateneo.edu')`,
+    [otherMember],
+  );
+  await q(
+    `insert into memberships(user_id,email,fiscal_year_id,department_id,role) values($1,'other@student.ateneo.edu',$2,$3,'DEPARTMENT_MEMBER')`,
+    [otherMember, year, other],
+  );
   await q(
     `insert into department_budgets(fiscal_year_id,department_id,initial_approved_budget) values($1,$2,1000),($1,$3,999)`,
     [year, dept, other],
@@ -76,29 +110,82 @@ test("database migration, finance workflow, RLS isolation, and turnover", async 
     source_folder_id: "abcdefghijk",
   };
   for (const actor of [cfo, ocfo]) {
-    await assert.rejects(command(actor, "SUBMIT_REQUEST", payload), /Administrator accounts cannot submit/);
-    await assert.rejects(command(actor, "SAVE_REQUEST", payload), /Administrator accounts cannot submit/);
+    await assert.rejects(
+      command(actor, "SUBMIT_REQUEST", payload),
+      /Administrator accounts cannot submit/,
+    );
+    await assert.rejects(
+      command(actor, "SAVE_REQUEST", payload),
+      /Administrator accounts cannot submit/,
+    );
   }
   await db.exec(`set role service_role;`);
-  await assert.rejects(q(`select finance_engine_internal($1,'SUBMIT_REQUEST',$2::jsonb)`, [cfo, JSON.stringify(payload)]), /permission denied/);
+  await assert.rejects(
+    q(`select finance_engine_internal($1,'SUBMIT_REQUEST',$2::jsonb)`, [
+      cfo,
+      JSON.stringify(payload),
+    ]),
+    /permission denied/,
+  );
   await db.exec(`reset role;`);
   const request = await command(member, "SUBMIT_REQUEST", payload);
-  await assert.rejects(command(member, "TRANSITION", { id: request.id, status: "APPROVED" }), /Only CFO|Permission denied/);
-  await assert.rejects(command(member, "COMMENT", { id: request.id, visibility: "INTERNAL_OCFO", notes: "Forged private note" }), /Internal|internal|Permission/);
+  await assert.rejects(
+    command(member, "TRANSITION", { id: request.id, status: "APPROVED" }),
+    /Only CFO|Permission denied/,
+  );
+  await assert.rejects(
+    command(member, "COMMENT", {
+      id: request.id,
+      visibility: "INTERNAL_OCFO",
+      notes: "Forged private note",
+    }),
+    /Internal|internal|Permission/,
+  );
 
   assert.equal(request.reference_code, "AEA-2627-0001");
-  const initialQueue = (await q(`select * from request_register_sync where request_id=$1`, [request.id])).rows[0];
+  const initialQueue = (
+    await q(`select * from request_register_sync where request_id=$1`, [
+      request.id,
+    ])
+  ).rows[0];
   assert.equal(initialQueue.synced_version, 0);
-  const lease = (await q(`select claim_request_register_lease() token`)).rows[0].token;
+  const lease = (await q(`select claim_request_register_lease() token`)).rows[0]
+    .token;
   assert(lease);
-  assert.equal((await q(`select claim_request_register_lease() token`)).rows[0].token, null);
-  assert.equal((await q(`select renew_request_register_lease($1) renewed`, [lease])).rows[0].renewed, true);
-  assert.equal((await q(`select finish_request_register_sync($1,$2,$3) done`, [lease,request.id,initialQueue.version])).rows[0].done, true);
-  assert.equal((await q(`select count(*) n from pending_request_register_jobs()`)).rows[0].n, 0);
+  assert.equal(
+    (await q(`select claim_request_register_lease() token`)).rows[0].token,
+    null,
+  );
+  assert.equal(
+    (await q(`select renew_request_register_lease($1) renewed`, [lease]))
+      .rows[0].renewed,
+    true,
+  );
+  assert.equal(
+    (
+      await q(`select finish_request_register_sync($1,$2,$3) done`, [
+        lease,
+        request.id,
+        initialQueue.version,
+      ])
+    ).rows[0].done,
+    true,
+  );
+  assert.equal(
+    (await q(`select count(*) n from pending_request_register_jobs()`)).rows[0]
+      .n,
+    0,
+  );
   await q(`select release_request_register_lease($1)`, [lease]);
   await db.exec(`set role authenticated;`);
-  await assert.rejects(q(`select claim_request_register_lease()`), /permission denied/);
-  await assert.rejects(q(`select * from pending_request_register_jobs()`), /permission denied/);
+  await assert.rejects(
+    q(`select claim_request_register_lease()`),
+    /permission denied/,
+  );
+  await assert.rejects(
+    q(`select * from pending_request_register_jobs()`),
+    /permission denied/,
+  );
   await db.exec(`reset role;`);
 
   await assert.rejects(
@@ -117,17 +204,45 @@ test("database migration, finance workflow, RLS isolation, and turnover", async 
     command(cfo, "TRANSITION", { id: request.id, status: "APPROVED" }),
     /Verify every required document/,
   );
-  await command(cfo, "TRANSITION", { id: request.id, status: "UNDER_OCFO_REVIEW" });
+  await command(cfo, "TRANSITION", {
+    id: request.id,
+    status: "UNDER_OCFO_REVIEW",
+  });
   await command(cfo, "TRANSITION", { id: request.id, status: "READY_FOR_CFO" });
-  assert.equal((await q(`select status from requests where id=$1`, [request.id])).rows[0].status, "READY_FOR_CFO");
-  const changedQueue = (await q(`select * from request_register_sync where request_id=$1`, [request.id])).rows[0];
+  assert.equal(
+    (await q(`select status from requests where id=$1`, [request.id])).rows[0]
+      .status,
+    "READY_FOR_CFO",
+  );
+  const changedQueue = (
+    await q(`select * from request_register_sync where request_id=$1`, [
+      request.id,
+    ])
+  ).rows[0];
   assert(changedQueue.version > changedQueue.synced_version);
-  const staleLease = (await q(`select claim_request_register_lease() token`)).rows[0].token;
-  await q(`update request_register_lease set expires_at=now()-interval '1 second'`);
-  assert.equal((await q(`select finish_request_register_sync($1,$2,$3) done`, [staleLease,request.id,changedQueue.version])).rows[0].done, false);
-  const currentLease = (await q(`select claim_request_register_lease() token`)).rows[0].token;
+  const staleLease = (await q(`select claim_request_register_lease() token`))
+    .rows[0].token;
+  await q(
+    `update request_register_lease set expires_at=now()-interval '1 second'`,
+  );
+  assert.equal(
+    (
+      await q(`select finish_request_register_sync($1,$2,$3) done`, [
+        staleLease,
+        request.id,
+        changedQueue.version,
+      ])
+    ).rows[0].done,
+    false,
+  );
+  const currentLease = (await q(`select claim_request_register_lease() token`))
+    .rows[0].token;
   await q(`select release_request_register_lease($1)`, [staleLease]);
-  assert.equal((await q(`select renew_request_register_lease($1) renewed`, [currentLease])).rows[0].renewed, true);
+  assert.equal(
+    (await q(`select renew_request_register_lease($1) renewed`, [currentLease]))
+      .rows[0].renewed,
+    true,
+  );
   await q(`select release_request_register_lease($1)`, [currentLease]);
 
   await command(cfo, "TRANSITION", {
@@ -317,12 +432,35 @@ test("database migration, finance workflow, RLS isolation, and turnover", async 
     visibility: "REQUESTER_VISIBLE",
     notes: "Department note",
   });
-  const project = (await q(`insert into projects(fiscal_year_id,name) values($1,'Shared project') returning id`, [year])).rows[0].id;
-  const privateProject = (await q(`insert into projects(fiscal_year_id,name) values($1,'Other department project') returning id`, [year])).rows[0].id;
-  await q(`insert into project_departments values($1,$3),($1,$4),($2,$4)`, [project, privateProject, dept, other]);
-  await q(`insert into project_members values($1,$2,$4),($1,$3,$5)`, [project, member, cfo, dept, other]);
-  for (const email of ['cfo', 'ocfo']) {
-    await db.exec(`set test.email='${email}@student.ateneo.edu';set role authenticated;`);
+  const project = (
+    await q(
+      `insert into projects(fiscal_year_id,name) values($1,'Shared project') returning id`,
+      [year],
+    )
+  ).rows[0].id;
+  const privateProject = (
+    await q(
+      `insert into projects(fiscal_year_id,name) values($1,'Other department project') returning id`,
+      [year],
+    )
+  ).rows[0].id;
+  await q(`insert into project_departments values($1,$3),($1,$4),($2,$4)`, [
+    project,
+    privateProject,
+    dept,
+    other,
+  ]);
+  await q(`insert into project_members values($1,$2,$4),($1,$3,$5)`, [
+    project,
+    member,
+    cfo,
+    dept,
+    other,
+  ]);
+  for (const email of ["cfo", "ocfo"]) {
+    await db.exec(
+      `set test.email='${email}@student.ateneo.edu';set role authenticated;`,
+    );
     assert.equal((await q(`select * from projects`)).rows.length, 2);
     assert.equal((await q(`select * from project_departments`)).rows.length, 3);
     assert.equal((await q(`select * from project_members`)).rows.length, 2);
@@ -350,64 +488,199 @@ test("database migration, finance workflow, RLS isolation, and turnover", async 
   await db.exec(`reset role;`);
   const gmail = "88888888-8888-4888-8888-888888888888";
   await q(`insert into auth.users values($1)`, [gmail]);
-  await q(`insert into public.users(id,email) values($1,'enrolled@gmail.com')`, [gmail]);
-  const enroll = (email: string) => q(`select admin_command($1,'MEMBERSHIP',$2::jsonb)`, [cfo, JSON.stringify({
-    fiscal_year_id: year, department_id: dept, email, role: "DEPARTMENT_MEMBER", is_active: true,
-  })]);
-  await assert.rejects(enroll("cfo@student.ateneo.edu"), /Cannot remove the last active CFO/);
+  await q(
+    `insert into public.users(id,email) values($1,'enrolled@gmail.com')`,
+    [gmail],
+  );
+  const enroll = (email: string) =>
+    q(`select admin_command($1,'MEMBERSHIP',$2::jsonb)`, [
+      cfo,
+      JSON.stringify({
+        fiscal_year_id: year,
+        department_id: dept,
+        email,
+        role: "DEPARTMENT_MEMBER",
+        is_active: true,
+      }),
+    ]);
+  await assert.rejects(
+    enroll("cfo@student.ateneo.edu"),
+    /Cannot remove the last active CFO/,
+  );
   await enroll("enrolled@gmail.com");
-  await assert.rejects(enroll("outsider@gmail.com.evil.example"), /Membership email/);
-  const gmailRequest = await command(gmail, "SUBMIT_REQUEST", { ...payload, title: "Gmail member request" });
-  await assert.rejects(command(gmail, "SUBMIT_REQUEST", { ...payload, department_id: other }), /Permission denied/);
-  await db.exec(`set test.email='enrolled@gmail.com';set test.uid='${gmail}';set role authenticated;`);
+  await assert.rejects(
+    enroll("outsider@gmail.com.evil.example"),
+    /Membership email/,
+  );
+  const gmailRequest = await command(gmail, "SUBMIT_REQUEST", {
+    ...payload,
+    title: "Gmail member request",
+  });
+  await assert.rejects(
+    command(gmail, "SUBMIT_REQUEST", { ...payload, department_id: other }),
+    /Permission denied/,
+  );
+  await db.exec(
+    `set test.email='enrolled@gmail.com';set test.uid='${gmail}';set role authenticated;`,
+  );
   assert.equal((await q(`select * from department_financials`)).rows.length, 1);
-  assert.equal((await q(`select * from requests where id=$1`, [gmailRequest.id])).rows.length, 1);
-  assert.equal((await q(`select * from requests where department_id=$1`, [other])).rows.length, 0);
-  assert.equal((await q(`select * from request_comments where visibility='INTERNAL_OCFO'`)).rows.length, 0);
-  await db.exec(`reset role;set test.email='unenrolled@gmail.com';set role authenticated;`);
+  assert.equal(
+    (await q(`select * from requests where id=$1`, [gmailRequest.id])).rows
+      .length,
+    1,
+  );
+  assert.equal(
+    (await q(`select * from requests where department_id=$1`, [other])).rows
+      .length,
+    0,
+  );
+  assert.equal(
+    (await q(`select * from request_comments where visibility='INTERNAL_OCFO'`))
+      .rows.length,
+    0,
+  );
+  await db.exec(
+    `reset role;set test.email='unenrolled@gmail.com';set role authenticated;`,
+  );
   assert.equal((await q(`select * from requests`)).rows.length, 0);
-  await db.exec(`reset role;update memberships set is_active=false where email='enrolled@gmail.com';`);
-  await assert.rejects(command(gmail, "SUBMIT_REQUEST", payload), /No active membership|registered department/);
+  await db.exec(
+    `reset role;update memberships set is_active=false where email='enrolled@gmail.com';`,
+  );
+  await assert.rejects(
+    command(gmail, "SUBMIT_REQUEST", payload),
+    /No active membership|registered department/,
+  );
   await db.exec(`set test.email='enrolled@gmail.com';set role authenticated;`);
   assert.equal((await q(`select * from requests`)).rows.length, 0);
   await db.exec(`reset role;`);
   const registered = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
   await q(`insert into auth.users values($1)`, [registered]);
-  await db.exec(`set test.email='new.member@student.ateneo.edu';set test.uid='${registered}';set role authenticated;`);
+  await db.exec(
+    `set test.email='new.member@student.ateneo.edu';set test.uid='${registered}';set role authenticated;`,
+  );
   // A display name resembling a role cannot affect the fixed database permission.
-  const registration = (await q(`select register_member($1,'CFO_ADMIN',null) result`, [dept])).rows[0].result;
+  const registration = (
+    await q(`select register_member($1,'CFO_ADMIN',null) result`, [dept])
+  ).rows[0].result;
   assert.equal(registration.email, "new.member@student.ateneo.edu");
   assert.equal(registration.user_id, registered);
   assert.equal(registration.role, "DEPARTMENT_MEMBER");
   assert.equal((await q(`select * from department_financials`)).rows.length, 1);
-  await assert.rejects(q(`select register_member($1,'Another registration',null)`, [other]), /already has a membership/);
-  await assert.rejects(q(`select register_member($1,'Forged','avatar','CFO_ADMIN')`, [dept]), /does not exist/);
+  await assert.rejects(
+    q(`select register_member($1,'Another registration',null)`, [other]),
+    /already has a membership/,
+  );
+  await assert.rejects(
+    q(`select register_member($1,'Forged','avatar','CFO_ADMIN')`, [dept]),
+    /does not exist/,
+  );
   await db.exec(`reset role;`);
-  assert.equal((await q(`select count(*)::int n from audit_logs where action='REGISTER_MEMBER' and actor_user_id=$1`, [registered])).rows[0].n, 1);
-  await command(registered, "SUBMIT_REQUEST", { ...payload, title: "New registered member request" });
-  await assert.rejects(q(`select manage_registered_user($1,$2,$3,true,false)`, [registered, registration.id, other]), /Permission denied|Administrator/);
-  await q(`select manage_registered_user($1,$2,$3,true,false)`, [cfo, registration.id, other]);
-  assert.equal((await q(`select count(*)::int n from memberships where email='new.member@student.ateneo.edu' and is_active`)).rows[0].n, 1);
-  await assert.rejects(command(registered, "SUBMIT_REQUEST", payload), /registered department/);
-  const reassigned = (await q(`select id from memberships where email='new.member@student.ateneo.edu' and is_active`)).rows[0].id;
-  await q(`select manage_registered_user($1,$2,$3,false,false)`, [cfo, reassigned, other]);
-  await db.exec(`set test.email='new.member@student.ateneo.edu';set role authenticated;`);
+  assert.equal(
+    (
+      await q(
+        `select count(*)::int n from audit_logs where action='REGISTER_MEMBER' and actor_user_id=$1`,
+        [registered],
+      )
+    ).rows[0].n,
+    1,
+  );
+  await command(registered, "SUBMIT_REQUEST", {
+    ...payload,
+    title: "New registered member request",
+  });
+  await assert.rejects(
+    q(`select manage_registered_user($1,$2,$3,true,false)`, [
+      registered,
+      registration.id,
+      other,
+    ]),
+    /Permission denied|Administrator/,
+  );
+  await q(`select manage_registered_user($1,$2,$3,true,false)`, [
+    cfo,
+    registration.id,
+    other,
+  ]);
+  assert.equal(
+    (
+      await q(
+        `select count(*)::int n from memberships where email='new.member@student.ateneo.edu' and is_active`,
+      )
+    ).rows[0].n,
+    1,
+  );
+  await assert.rejects(
+    command(registered, "SUBMIT_REQUEST", payload),
+    /registered department/,
+  );
+  const reassigned = (
+    await q(
+      `select id from memberships where email='new.member@student.ateneo.edu' and is_active`,
+    )
+  ).rows[0].id;
+  await q(`select manage_registered_user($1,$2,$3,false,false)`, [
+    cfo,
+    reassigned,
+    other,
+  ]);
+  await db.exec(
+    `set test.email='new.member@student.ateneo.edu';set role authenticated;`,
+  );
   assert.equal((await q(`select * from requests`)).rows.length, 0);
-  await assert.rejects(q(`select register_member($1,'Reactivate myself',null)`, [dept]), /already has a membership/);
+  await assert.rejects(
+    q(`select register_member($1,'Reactivate myself',null)`, [dept]),
+    /already has a membership/,
+  );
   await db.exec(`reset role;`);
-  await q(`select manage_registered_user($1,$2,$3,true,true)`, [cfo, reassigned, other]);
-  assert.equal((await q(`select role from memberships where id=$1`, [reassigned])).rows[0].role, "CFO_ADMIN");
-  assert.equal((await q(`select count(*)::int n from audit_logs where action='GRANT_ADMIN' and actor_user_id=$1`, [cfo])).rows[0].n, 1);
-  await assert.rejects(command(registered, "SUBMIT_REQUEST", { ...payload, department_id: other }), /Administrator accounts cannot submit/);
+  await q(`select manage_registered_user($1,$2,$3,true,true)`, [
+    cfo,
+    reassigned,
+    other,
+  ]);
+  assert.equal(
+    (await q(`select role from memberships where id=$1`, [reassigned])).rows[0]
+      .role,
+    "CFO_ADMIN",
+  );
+  assert.equal(
+    (
+      await q(
+        `select count(*)::int n from audit_logs where action='GRANT_ADMIN' and actor_user_id=$1`,
+        [cfo],
+      )
+    ).rows[0].n,
+    1,
+  );
+  await assert.rejects(
+    command(registered, "SUBMIT_REQUEST", { ...payload, department_id: other }),
+    /Administrator accounts cannot submit/,
+  );
   await db.exec(`reset role;`);
   const outsider = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
   await q(`insert into auth.users values($1)`, [outsider]);
-  await db.exec(`set test.uid='${outsider}';set test.email='outsider@gmail.com';set role authenticated;`);
-  await assert.rejects(q(`select register_member($1,'Gmail self signup',null)`, [dept]), /Ateneo Google/);
-  await db.exec(`reset role;set test.email='outsider@student.ateneo.edu';set test.provider='email';set role authenticated;`);
-  await assert.rejects(q(`select register_member($1,'Non Google signup',null)`, [dept]), /Ateneo Google/);
-  await db.exec(`reset role;set test.provider='google';set role authenticated;`);
-  await assert.rejects(q(`select register_member($1,'Bad department',null)`, ["cccccccc-cccc-4ccc-8ccc-cccccccccccc"]), /active AEA department/);
+  await db.exec(
+    `set test.uid='${outsider}';set test.email='outsider@gmail.com';set role authenticated;`,
+  );
+  await assert.rejects(
+    q(`select register_member($1,'Gmail self signup',null)`, [dept]),
+    /Ateneo Google/,
+  );
+  await db.exec(
+    `reset role;set test.email='outsider@student.ateneo.edu';set test.provider='email';set role authenticated;`,
+  );
+  await assert.rejects(
+    q(`select register_member($1,'Non Google signup',null)`, [dept]),
+    /Ateneo Google/,
+  );
+  await db.exec(
+    `reset role;set test.provider='google';set role authenticated;`,
+  );
+  await assert.rejects(
+    q(`select register_member($1,'Bad department',null)`, [
+      "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    ]),
+    /active AEA department/,
+  );
   await db.exec(`reset role;`);
   await db.exec(
     `reset role;update fiscal_years set is_closed=true where id='${year}';`,

@@ -27,11 +27,17 @@ const result = await build({
         b.onResolve(
           {
             filter:
-              /^(next\/link|next\/navigation|server-only|@\/app\/(actions|register\/actions)|@\/lib\/(data|auth|registration|google-drive))$/,
+              /^(next\/link|next\/navigation|server-only|@\/app\/(actions|register\/actions)|@\/lib\/(data|auth|registration|google-drive|page-data))$/,
           },
           (args) => ({ path: args.path, namespace: "ux-fixture" }),
         );
         b.onLoad({ filter: /.*/, namespace: "ux-fixture" }, (args) => {
+          if (args.path === "@/lib/page-data")
+            return {
+              contents: `import {getFixture} from ${JSON.stringify(fixturePath)};export const pageNumber=v=>Math.max(1,Number(v)||1);export const getRequestListData=async(p)=>{const w=getFixture();const records=w.requests.filter(r=>["APPROVED","PROCESSING","COMPLETED","REJECTED","NEEDS_REVISION"].includes(r.status)&&(!p.status||(p.status==="APPROVED"?["APPROVED","PROCESSING","COMPLETED"].includes(r.status):r.status===p.status)));return {...w,requests:records,page:1,count:records.length,queue:"decisions"};};export const getDashboardData=async()=>{const w=getFixture();return {...w,revisions:w.requests.filter(r=>r.status==="NEEDS_REVISION"),pending:w.requests.filter(r=>["SUBMITTED","UNDER_OCFO_REVIEW","READY_FOR_CFO","APPROVED","PROCESSING"].includes(r.status)).length,submitted:w.requests.filter(r=>r.status==="SUBMITTED").length,ready:w.requests.filter(r=>r.status==="READY_FOR_CFO").length,revisionCount:w.requests.filter(r=>r.status==="NEEDS_REVISION").length};};`,
+              loader: "js",
+              resolveDir: process.cwd(),
+            };
           if (args.path === "server-only")
             return { contents: "export {};", loader: "js" };
           if (args.path === "next/link")
@@ -380,7 +386,9 @@ try {
   );
   await page.getByRole("link", { name: "Review", exact: true }).waitFor();
   assert.equal(await page.getByLabel("Status", { exact: true }).count(), 0);
-  await record("closed-year action suppression and Finance inbox without decision statuses");
+  await record(
+    "closed-year action suppression and Finance inbox without decision statuses",
+  );
 
   for (const content of ["dashboard", "guide", "requests"]) {
     await open(`page=${content}&role=CFO_ADMIN&empty=1`);
@@ -408,7 +416,15 @@ try {
     .waitFor();
   await open("page=approvals&role=CFO_ADMIN&status=APPROVED");
   await page.getByRole("link", { name: "View", exact: true }).waitFor();
-  assert.deepEqual(await page.getByLabel("Status", { exact: true }).locator("option").allTextContents(), ["All statuses", "Approved", "Rejected", "Incomplete"]);
+  assert.deepEqual(
+    await page
+      .getByLabel("Status", { exact: true })
+      .locator("option")
+      .allTextContents(),
+    ["All statuses", "Approved", "Rejected", "Incomplete"],
+  );
+  assert.deepEqual(await page.locator("form.table-filters [name]").evaluateAll(elements => elements.map(element => element.getAttribute("name"))),
+    ["year", "status", "department", "type", "project"]);
   assert(!(await page.locator("main").innerText()).includes("Available After"));
   assert.equal(await page.locator("thead th").count(), 7);
   await page.screenshot({
@@ -488,14 +504,19 @@ try {
   await page.getByRole("button", { name: "Download Compilation" }).click();
   const compilation = await exportReady;
   await compilation.saveAs("artifacts/ux-review/request-compilation.csv");
-  const exportedRequests = await readFile("artifacts/ux-review/request-compilation.csv", "utf8");
+  const exportedRequests = await readFile(
+    "artifacts/ux-review/request-compilation.csv",
+    "utf8",
+  );
   assert(exportedRequests.includes("Speaker reimbursement"));
   assert(exportedRequests.includes("Reimbursement"));
 
-  await page.locator("summary").filter({ hasText: /^Reimbursement/ }).click();
-  await page.getByRole("link", { name: "View Details", exact: true }).waitFor();
-  assert((await page.locator("main").innerText()).includes("Speaker reimbursement"));
-  await page.screenshot({ path: "artifacts/ux-review/request-summaries.png", fullPage: true });
+  assert.equal(await page.locator("main details").count(), 0);
+  assert.equal(await page.locator("main a[href^=\"#type-\"]").count(), 0);
+  await page.screenshot({
+    path: "artifacts/ux-review/request-summaries.png",
+    fullPage: true,
+  });
   await open("page=requests&role=DEPARTMENT_MEMBER");
   await page.getByLabel("Status", { exact: true }).waitFor();
   assert.deepEqual(await page.locator("thead th").allTextContents(), [
@@ -516,8 +537,16 @@ try {
   assert.equal(await page.getByRole("checkbox").count(), 0);
   await open("page=dashboard&role=CFO_ADMIN");
   await page.getByRole("heading", { name: "To Review" }).waitFor();
-  assert.equal(await page.getByRole("link", { name: "Department Budgets", exact: true }).count(), 0);
-  assert.equal(await page.getByRole("link", { name: "Transactions", exact: true }).count(), 0);
+  assert.equal(
+    await page
+      .getByRole("link", { name: "Department Budgets", exact: true })
+      .count(),
+    0,
+  );
+  assert.equal(
+    await page.getByRole("link", { name: "Transactions", exact: true }).count(),
+    0,
+  );
   assert.equal(
     await page.getByRole("heading", { name: "Request Overview" }).count(),
     0,
@@ -574,7 +603,9 @@ try {
       .getAttribute("aria-expanded"),
     "true",
   );
-  await page.getByRole("button", { name: "Close navigation" }).click({ position: { x: 370, y: 400 } });
+  await page
+    .getByRole("button", { name: "Close navigation" })
+    .click({ position: { x: 370, y: 400 } });
   await page.waitForFunction(
     () => document.querySelector(".sidebar").getBoundingClientRect().right <= 0,
   );

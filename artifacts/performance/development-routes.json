@@ -1,0 +1,89 @@
+{
+  "context": "Unauthenticated localhost HTTP timings; protected routes redirect to login. Not authenticated user-flow timings.",
+  "samples": [
+    {
+      "route": "/login",
+      "trial": 0,
+      "status": 200,
+      "ms": 3314.4,
+      "bytes": 13957
+    },
+    {
+      "route": "/dashboard",
+      "trial": 0,
+      "status": 307,
+      "ms": 1826.5,
+      "bytes": 14496
+    },
+    {
+      "route": "/requests",
+      "trial": 0,
+      "status": 307,
+      "ms": 450.5,
+      "bytes": 14493
+    },
+    {
+      "route": "/approvals",
+      "trial": 0,
+      "status": 307,
+      "ms": 466.4,
+      "bytes": 14457
+    },
+    {
+      "route": "/login",
+      "trial": 1,
+      "status": 200,
+      "ms": 326.9,
+      "bytes": 13957
+    },
+    {
+      "route": "/dashboard",
+      "trial": 1,
+      "status": 307,
+      "ms": 308.8,
+      "bytes": 14496
+    },
+    {
+      "route": "/requests",
+      "trial": 1,
+      "status": 307,
+      "ms": 147.4,
+      "bytes": 14493
+    },
+    {
+      "route": "/approvals",
+      "trial": 1,
+      "status": 307,
+      "ms": 134.7,
+      "bytes": 14457
+    },
+    {
+      "route": "/login",
+      "trial": 2,
+      "status": 200,
+      "ms": 76.4,
+      "bytes": 13957
+    },
+    {
+      "route": "/dashboard",
+      "trial": 2,
+      "status": 307,
+      "ms": 137.5,
+      "bytes": 14496
+    },
+    {
+      "route": "/requests",
+      "trial": 2,
+      "status": 307,
+      "ms": 142.3,
+      "bytes": 14493
+    },
+    {
+      "route": "/approvals",
+      "trial": 2,
+      "status": 307,
+      "ms": 135.3,
+      "bytes": 14457
+    }
+  ]
+}
