@@ -1,5 +1,7 @@
 export function oauthErrorMessage(code?: string): string {
   switch (code) {
+    case "configuration":
+      return "Sign-in is unavailable because the server configuration is incomplete. Check the Production environment variables in Vercel, then redeploy. The administrator can find the missing variable names in the runtime logs.";
     case "database":
       return "Database setup is incomplete. Apply the Supabase migration and seed before completing sign-in.";
     case "origin_mismatch":
