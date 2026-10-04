@@ -367,3 +367,345 @@ alter policy project_members_read on public.project_members
   using (public.can_read_project_department(project_id, department_id));
 
 commit;
+
+-- Existing databases: run this migration only, after migrations 001 and 002.
+-- Gmail accounts still require an active membership with their exact email.
+begin;
+create or replace function public.email_domain_allowed(email text) returns boolean
+language sql stable security definer set search_path=public as $$
+ select coalesce(email ~ '^[^@[:space:]]+@[^@[:space:]]+$' and
+  split_part(lower(email),'@',2) in ('gmail.com', lower(trim(coalesce(
+   (select value #>> '{}' from organization_settings where key='allowed_email_domain'),
+   'student.ateneo.edu')))), false);
+$$;
+revoke all on function public.email_domain_allowed(text) from public,anon;
+grant execute on function public.email_domain_allowed(text) to authenticated,service_role;
+
+create or replace function public.has_access(y uuid, d uuid default null) returns boolean language sql stable security definer set search_path=public as $$
+ select exists(select 1 from memberships m where lower(m.email)=lower(auth.jwt()->>'email') and m.is_active and ((m.fiscal_year_id=y and (m.role in ('CFO_ADMIN','OCFO_MEMBER') or (m.department_id=d and m.role='DEPARTMENT_MEMBER'))) or (m.role in ('CFO_ADMIN','OCFO_MEMBER') and exists(select 1 from fiscal_years f where f.id=m.fiscal_year_id and f.is_active))) and exists(select 1 from memberships a join fiscal_years f on f.id=a.fiscal_year_id where f.is_active and a.is_active and lower(a.email)=lower(auth.jwt()->>'email')) and public.email_domain_allowed(auth.jwt()->>'email'));
+$$;
+
+create or replace function public.assert_actor(actor uuid,y uuid,d uuid,admin_only boolean default false,finance_only boolean default false) returns public.finance_role language plpgsql security definer set search_path=public as $$
+declare rr finance_role; begin
+ if exists(select 1 from fiscal_years where id=y and is_closed) then raise exception 'This fiscal year is closed and read-only.'; end if;
+ if not exists(select 1 from users u join memberships m on lower(m.email)=lower(u.email) join fiscal_years f on f.id=m.fiscal_year_id where u.id=actor and f.is_active and m.is_active and public.email_domain_allowed(u.email)) then raise exception 'No active membership.'; end if;
+ select m.role into rr from memberships m join users u on lower(u.email)=lower(m.email) where u.id=actor and (m.fiscal_year_id=y or (m.role in ('CFO_ADMIN','OCFO_MEMBER') and exists(select 1 from fiscal_years f where f.id=m.fiscal_year_id and f.is_active))) and m.is_active and ((m.department_id=d and m.role='DEPARTMENT_MEMBER') or m.role in ('CFO_ADMIN','OCFO_MEMBER')) order by case m.role when 'CFO_ADMIN' then 0 when 'OCFO_MEMBER' then 1 else 2 end limit 1;
+ if rr is null or (admin_only and rr <> 'CFO_ADMIN') or (finance_only and rr not in ('CFO_ADMIN','OCFO_MEMBER')) then raise exception 'Permission denied.'; end if;
+ return rr;
+end $$;
+
+create or replace function public.admin_command(actor uuid,command text,p jsonb) returns jsonb language plpgsql security definer set search_path=public as $$
+declare y uuid; active_y uuid; d uuid; new_id uuid; prior jsonb; result jsonb; rr finance_role; begin
+ select id into active_y from fiscal_years where is_active;
+ select department_id into d from memberships m join users u on lower(u.email)=lower(m.email) where u.id=actor and m.fiscal_year_id=active_y and m.is_active and m.role='CFO_ADMIN' limit 1;
+ -- Closing is allowed from the active admin membership; closed years never grant mutation.
+ if d is null then raise exception 'CFO admin access required.'; end if;
+ rr:=assert_actor(actor,active_y,d,true);y:=coalesce(nullif(p->>'fiscal_year_id','')::uuid,active_y);
+ if command='CREATE_YEAR' then
+ insert into fiscal_years(label,code,start_date,end_date) values(p->>'label',p->>'code',(p->>'start_date')::date,(p->>'end_date')::date) returning id into new_id;
+ insert into department_budgets(fiscal_year_id,department_id) select new_id,id from departments where is_active;
+ if coalesce((p->>'copy_config')::boolean,false) then insert into faq_guides(fiscal_year_id,title,slug,content,display_order,is_published,updated_by) select new_id,title,slug,content,display_order,is_published,actor from faq_guides where fiscal_year_id=active_y; end if;
+ result:=jsonb_build_object('id',new_id);
+ elsif command='ACTIVATE_YEAR' then
+ perform pg_advisory_xact_lock(73191);
+ if not exists(select 1 from fiscal_years where id=y and not is_closed) then raise exception 'Choose an open fiscal year.'; end if;
+ if not exists(select 1 from memberships where fiscal_year_id=y and is_active and role='CFO_ADMIN') then raise exception 'Assign a succeeding CFO before activating the year.'; end if;
+ update fiscal_years set is_active=false where is_active;update fiscal_years set is_active=true where id=y;result:=p;
+ elsif command='CLOSE_YEAR' then
+ if y=active_y then raise exception 'Activate the succeeding year before closing this year.'; end if;
+ if exists(select 1 from commitments where fiscal_year_id=y and status='ACTIVE' and remaining_amount>0) or exists(select 1 from requests where fiscal_year_id=y and status not in ('COMPLETED','REJECTED','CANCELLED')) or exists(select 1 from discrepancies where fiscal_year_id=y and status='OPEN' and severity='CRITICAL') then raise exception 'Resolve open requests, commitments, and critical discrepancies before closing.'; end if;
+ update fiscal_years set is_closed=true,closed_at=now() where id=y;result:=p;
+ elsif command='MEMBERSHIP' then
+ if exists(select 1 from fiscal_years where id=y and is_closed) then raise exception 'Closed year is read-only.'; end if;
+ if not public.email_domain_allowed(p->>'email') then raise exception 'Membership email must use the configured organization domain or gmail.com.'; end if;
+ select to_jsonb(m.*) into prior from memberships m where lower(email)=lower(p->>'email') and fiscal_year_id=y and department_id=(p->>'department_id')::uuid;
+ if y=active_y and exists(select 1 from memberships m where lower(m.email)=lower(p->>'email') and m.fiscal_year_id=active_y and m.department_id=(p->>'department_id')::uuid and m.role='CFO_ADMIN' and m.is_active) and (p->>'role'<>'CFO_ADMIN' or not (p->>'is_active')::boolean) and (select count(*) from memberships where fiscal_year_id=active_y and role='CFO_ADMIN' and is_active)<=1 then raise exception 'Cannot remove the last active CFO.'; end if;
+ insert into memberships(email,user_id,fiscal_year_id,department_id,role,is_active) values(lower(p->>'email'),(select id from users where lower(email)=lower(p->>'email')),y,(p->>'department_id')::uuid,(p->>'role')::finance_role,(p->>'is_active')::boolean) on conflict(email,fiscal_year_id,department_id) do update set role=excluded.role,is_active=excluded.is_active,user_id=excluded.user_id returning to_jsonb(memberships.*) into result;
+ elsif command='PROJECT' then
+ if exists(select 1 from fiscal_years where id=y and is_closed) then raise exception 'Closed year is read-only.'; end if;
+ new_id:=coalesce(nullif(p->>'id','')::uuid,gen_random_uuid());
+ insert into projects(id,fiscal_year_id,name,description,start_date,end_date,status,created_by) values(new_id,y,p->>'name',p->>'description',nullif(p->>'start_date','')::date,nullif(p->>'end_date','')::date,p->>'status',actor) on conflict(id) do update set name=excluded.name,description=excluded.description,start_date=excluded.start_date,end_date=excluded.end_date,status=excluded.status where projects.fiscal_year_id=y;
+ delete from project_departments where project_id=new_id;
+ insert into project_departments(project_id,department_id) select new_id,value::uuid from jsonb_array_elements_text(p->'department_ids');result:=jsonb_build_object('id',new_id);
+ elsif command='PROJECT_MEMBER' then
+ if exists(select 1 from fiscal_years where id=y and is_closed) then raise exception 'Closed year is read-only.'; end if;
+ if not exists(select 1 from projects pr join project_departments pd on pd.project_id=pr.id where pr.id=(p->>'project_id')::uuid and pr.fiscal_year_id=y and pd.department_id=(p->>'department_id')::uuid) then raise exception 'Project department mismatch.'; end if;
+ insert into project_members(project_id,user_id,department_id) values((p->>'project_id')::uuid,(p->>'user_id')::uuid,(p->>'department_id')::uuid) on conflict(project_id,user_id) do update set department_id=excluded.department_id;result:=p;
+ elsif command='DEPARTMENT' then
+ insert into departments(code,name,is_active) values(p->>'code',p->>'name',(p->>'is_active')::boolean) on conflict(code) do update set name=excluded.name,is_active=excluded.is_active returning to_jsonb(departments.*) into result;
+ elsif command='SETTING' then
+ select to_jsonb(s.*) into prior from organization_settings s where key=p->>'key';
+ insert into organization_settings(key,value) values(p->>'key',p->'value') on conflict(key) do update set value=excluded.value;result:=p;
+ elsif command='REQUEST_TYPE' then
+ update request_types set name=p->>'name',description=p->>'description',is_active=(p->>'is_active')::boolean,creates_commitment=(p->>'creates_commitment')::boolean,process_config=coalesce(p->'process_config','{}') where id=(p->>'id')::uuid;result:=p;
+ elsif command='REQUIREMENT' then
+ insert into document_requirements(request_type_id,document_code,label,is_required,condition_type,condition_json,display_order,template_url) values((p->>'request_type_id')::uuid,p->>'document_code',p->>'label',(p->>'is_required')::boolean,nullif(p->>'condition_type',''),p->'condition_json',coalesce((p->>'display_order')::integer,0),nullif(p->>'template_url','')) on conflict(request_type_id,document_code) do update set label=excluded.label,is_required=excluded.is_required,condition_type=excluded.condition_type,condition_json=excluded.condition_json,display_order=excluded.display_order,template_url=excluded.template_url;result:=p;
+ else raise exception 'Unknown admin command.'; end if;
+ insert into audit_logs(actor_user_id,action,entity_type,entity_id,fiscal_year_id,department_id,old_data,new_data) values(actor,command,'admin',null,active_y,d,prior,result);return result;
+end $$;
+commit;
+
+-- Additive portal refactor. Apply after migrations 001-003; safe to reapply.
+begin;
+create or replace function public.member_department(member_email text, y uuid) returns uuid
+language sql stable security definer set search_path=public as $$
+ select department_id from memberships where lower(email)=lower(member_email)
+ and fiscal_year_id=y and is_active and role='DEPARTMENT_MEMBER' order by id limit 1;
+$$;
+revoke all on function public.member_department(text,uuid) from public,anon,authenticated;
+grant execute on function public.member_department(text,uuid) to service_role;
+
+-- Narrow legacy multi-department member reads to one primary department.
+create or replace function public.has_access(y uuid, d uuid default null) returns boolean
+language sql stable security definer set search_path=public as $$
+ select exists(select 1 from memberships m where lower(m.email)=lower(auth.jwt()->>'email') and m.is_active
+ and ((m.fiscal_year_id=y and (m.role in ('CFO_ADMIN','OCFO_MEMBER') or
+ (m.role='DEPARTMENT_MEMBER' and d=public.member_department(m.email,y))))
+ or (m.role in ('CFO_ADMIN','OCFO_MEMBER') and exists(select 1 from fiscal_years f where f.id=m.fiscal_year_id and f.is_active))))
+ and exists(select 1 from memberships a join fiscal_years f on f.id=a.fiscal_year_id
+ where f.is_active and a.is_active and lower(a.email)=lower(auth.jwt()->>'email'))
+ and public.email_domain_allowed(auth.jwt()->>'email');
+$$;
+
+-- Preserve the existing atomic finance engine; add authorization ahead of it.
+do $$ begin
+ if to_regprocedure('public.finance_engine_internal(uuid,text,jsonb)') is null then
+  alter function public.finance_command(uuid,text,jsonb) rename to finance_engine_internal;
+ end if;
+end $$;
+revoke all on function public.finance_engine_internal(uuid,text,jsonb) from public,anon,authenticated,service_role;
+create or replace function public.finance_command(actor uuid,command text,p jsonb) returns jsonb
+language plpgsql security definer set search_path=public as $$
+declare actor_email text; y uuid; begin
+ if command in ('SAVE_REQUEST','SUBMIT_REQUEST') then
+  select email into actor_email from users where id=actor;
+  y:=(p->>'fiscal_year_id')::uuid;
+  if exists(select 1 from memberships m join fiscal_years f on f.id=m.fiscal_year_id
+   where lower(m.email)=lower(actor_email) and m.is_active and (f.is_active or f.id=y)
+   and m.role in ('CFO_ADMIN','OCFO_MEMBER')) then
+   raise exception 'Finance Administrator accounts cannot submit financial requests.';
+  end if;
+  if public.member_department(actor_email,y) is distinct from (p->>'department_id')::uuid then
+   raise exception 'Requests must use your registered department. Permission denied.';
+  end if;
+ end if;
+ return public.finance_engine_internal(actor,command,p);
+end $$;
+revoke all on function public.finance_command(uuid,text,jsonb) from public,anon,authenticated;
+grant execute on function public.finance_command(uuid,text,jsonb) to service_role;
+
+-- Identity comes from the validated OAuth JWT. No email or role arguments exist.
+create or replace function public.register_member(department_id uuid, full_name text, avatar_url text default null)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare actor uuid:=auth.uid(); actor_email text:=lower(auth.jwt()->>'email'); y uuid; result jsonb; begin
+ if actor is null or actor_email is null or split_part(actor_email,'@',2)<>'student.ateneo.edu'
+ or coalesce(auth.jwt()->'app_metadata'->>'provider','')<>'google' then
+  raise exception 'Register using your Ateneo Google account.';
+ end if;
+ perform pg_advisory_xact_lock(hashtextextended(actor::text, 0));
+ perform pg_advisory_xact_lock(hashtextextended(actor_email, 1));
+ select id into y from fiscal_years where is_active and not is_closed for share;
+ if y is null then raise exception 'Registration is unavailable until Finance opens an active fiscal year.'; end if;
+ if exists(select 1 from memberships where lower(email)=actor_email) then
+  raise exception 'This account already has a membership. Contact Finance to update or restore access.';
+ end if;
+ if not exists(select 1 from departments d where d.id=register_member.department_id and d.is_active) then
+  raise exception 'Choose an active AEA department.';
+ end if;
+ insert into users(id,email,full_name,avatar_url) values(actor,actor_email,left(trim(register_member.full_name),160),register_member.avatar_url)
+ on conflict(id) do update set full_name=excluded.full_name,avatar_url=excluded.avatar_url,updated_at=now();
+ insert into memberships(user_id,email,fiscal_year_id,department_id,role)
+ values(actor,actor_email,y,register_member.department_id,'DEPARTMENT_MEMBER') returning to_jsonb(memberships.*) into result;
+ insert into audit_logs(actor_user_id,action,entity_type,fiscal_year_id,department_id,new_data)
+ values(actor,'REGISTER_MEMBER','membership',y,register_member.department_id,result);
+ return result;
+end $$;
+revoke all on function public.register_member(uuid,text,text) from public,anon;
+grant execute on function public.register_member(uuid,text,text) to authenticated;
+
+-- Reassign or deactivate in one transaction without deleting historical access.
+create or replace function public.manage_registered_user(actor uuid, membership_id uuid, department_id uuid,
+ enabled boolean, promote boolean default false) returns jsonb
+language plpgsql security definer set search_path=public as $$
+declare target memberships; prior jsonb; result jsonb; active_y uuid; actor_dept uuid; begin
+ select id into active_y from fiscal_years where is_active;
+ select m.department_id into actor_dept from memberships m join users u on lower(u.email)=lower(m.email)
+ where u.id=actor and m.fiscal_year_id=active_y and m.is_active and m.role='CFO_ADMIN' limit 1;
+ perform public.assert_actor(actor,active_y,actor_dept,true);
+ if actor_dept is null then raise exception 'Finance Administrator access required.'; end if;
+ select * into target from memberships where id=membership_id;
+ if target.id is null then raise exception 'Membership not found.'; end if;
+ perform pg_advisory_xact_lock(hashtextextended('membership-admin:'||target.fiscal_year_id::text, 0));
+ select * into target from memberships where id=membership_id for update;
+ if exists(select 1 from fiscal_years where id=target.fiscal_year_id and is_closed) then raise exception 'Closed year is read-only.'; end if;
+ if not exists(select 1 from departments d where d.id=manage_registered_user.department_id and d.is_active) then raise exception 'Choose an active department.'; end if;
+ perform pg_advisory_xact_lock(hashtextextended(target.email, 1));
+ select jsonb_agg(to_jsonb(m)) into prior from memberships m where lower(m.email)=lower(target.email) and m.fiscal_year_id=target.fiscal_year_id;
+ if exists(select 1 from memberships m where lower(m.email)=lower(target.email) and m.fiscal_year_id=target.fiscal_year_id and m.role in ('CFO_ADMIN','OCFO_MEMBER')) then raise exception 'Use the administrator access form to change Finance privileges.'; end if;
+ update memberships m set is_active=false where lower(m.email)=lower(target.email) and m.fiscal_year_id=target.fiscal_year_id and m.role in ('DEPARTMENT_MEMBER','PROJECT_MEMBER');
+ insert into memberships(user_id,email,fiscal_year_id,department_id,role,is_active)
+ values(target.user_id,target.email,target.fiscal_year_id,manage_registered_user.department_id,
+ case when promote then 'CFO_ADMIN'::finance_role else 'DEPARTMENT_MEMBER'::finance_role end,enabled)
+ on conflict on constraint memberships_email_fiscal_year_id_department_id_key do update set role=excluded.role,is_active=excluded.is_active,user_id=excluded.user_id returning to_jsonb(memberships.*) into result;
+ insert into audit_logs(actor_user_id,action,entity_type,entity_id,fiscal_year_id,department_id,old_data,new_data)
+ values(actor,case when promote then 'GRANT_ADMIN' else 'UPDATE_REGISTERED_USER' end,'membership',target.id,target.fiscal_year_id,manage_registered_user.department_id,prior,result);
+ return result;
+end $$;
+revoke all on function public.manage_registered_user(uuid,uuid,uuid,boolean,boolean) from public,anon,authenticated;
+grant execute on function public.manage_registered_user(uuid,uuid,uuid,boolean,boolean) to service_role;
+create or replace function public.admin_command(actor uuid,command text,p jsonb) returns jsonb language plpgsql security definer set search_path=public as $$
+declare y uuid; active_y uuid; d uuid; new_id uuid; prior jsonb; result jsonb; rr finance_role; begin
+ select id into active_y from fiscal_years where is_active;
+ select department_id into d from memberships m join users u on lower(u.email)=lower(m.email) where u.id=actor and m.fiscal_year_id=active_y and m.is_active and m.role='CFO_ADMIN' limit 1;
+ -- Closing is allowed from the active admin membership; closed years never grant mutation.
+ if d is null then raise exception 'CFO admin access required.'; end if;
+ rr:=assert_actor(actor,active_y,d,true);y:=coalesce(nullif(p->>'fiscal_year_id','')::uuid,active_y);
+ if command='CREATE_YEAR' then
+ insert into fiscal_years(label,code,start_date,end_date) values(p->>'label',p->>'code',(p->>'start_date')::date,(p->>'end_date')::date) returning id into new_id;
+ insert into department_budgets(fiscal_year_id,department_id) select new_id,id from departments where is_active;
+ if coalesce((p->>'copy_config')::boolean,false) then insert into faq_guides(fiscal_year_id,title,slug,content,display_order,is_published,updated_by) select new_id,title,slug,content,display_order,is_published,actor from faq_guides where fiscal_year_id=active_y; end if;
+ result:=jsonb_build_object('id',new_id);
+ elsif command='ACTIVATE_YEAR' then
+ perform pg_advisory_xact_lock(73191);
+ if not exists(select 1 from fiscal_years where id=y and not is_closed) then raise exception 'Choose an open fiscal year.'; end if;
+ if not exists(select 1 from memberships where fiscal_year_id=y and is_active and role='CFO_ADMIN') then raise exception 'Assign a succeeding CFO before activating the year.'; end if;
+ update fiscal_years set is_active=false where is_active;update fiscal_years set is_active=true where id=y;result:=p;
+ elsif command='CLOSE_YEAR' then
+ if y=active_y then raise exception 'Activate the succeeding year before closing this year.'; end if;
+ if exists(select 1 from commitments where fiscal_year_id=y and status='ACTIVE' and remaining_amount>0) or exists(select 1 from requests where fiscal_year_id=y and status not in ('COMPLETED','REJECTED','CANCELLED')) or exists(select 1 from discrepancies where fiscal_year_id=y and status='OPEN' and severity='CRITICAL') then raise exception 'Resolve open requests, commitments, and critical discrepancies before closing.'; end if;
+ update fiscal_years set is_closed=true,closed_at=now() where id=y;result:=p;
+ elsif command='MEMBERSHIP' then
+ perform pg_advisory_xact_lock(hashtextextended('membership-admin:'||y::text, 0));
+ if exists(select 1 from fiscal_years where id=y and is_closed) then raise exception 'Closed year is read-only.'; end if;
+ if not public.email_domain_allowed(p->>'email') then raise exception 'Membership email must use the configured organization domain or gmail.com.'; end if;
+ select jsonb_agg(to_jsonb(m)) into prior from memberships m where lower(email)=lower(p->>'email') and fiscal_year_id=y;
+ if not exists(select 1 from departments where id=(p->>'department_id')::uuid and is_active) then raise exception 'Choose an active department.'; end if;
+ perform pg_advisory_xact_lock(hashtextextended(lower(p->>'email'), 1));
+ if y=active_y and exists(select 1 from memberships m where lower(m.email)=lower(p->>'email') and m.fiscal_year_id=active_y and m.department_id=(p->>'department_id')::uuid and m.role='CFO_ADMIN' and m.is_active) and (p->>'role'<>'CFO_ADMIN' or not (p->>'is_active')::boolean) and (select count(*) from memberships where fiscal_year_id=active_y and role='CFO_ADMIN' and is_active)<=1 then raise exception 'Cannot remove the last active CFO.'; end if;
+ if p->>'role'='DEPARTMENT_MEMBER' then update memberships set is_active=false where lower(email)=lower(p->>'email') and fiscal_year_id=y and department_id<>(p->>'department_id')::uuid and role in ('DEPARTMENT_MEMBER','PROJECT_MEMBER'); end if;
+ insert into memberships(email,user_id,fiscal_year_id,department_id,role,is_active) values(lower(p->>'email'),(select id from users where lower(email)=lower(p->>'email')),y,(p->>'department_id')::uuid,(p->>'role')::finance_role,(p->>'is_active')::boolean) on conflict(email,fiscal_year_id,department_id) do update set role=excluded.role,is_active=excluded.is_active,user_id=excluded.user_id returning to_jsonb(memberships.*) into result;
+ elsif command='PROJECT' then
+ if exists(select 1 from fiscal_years where id=y and is_closed) then raise exception 'Closed year is read-only.'; end if;
+ new_id:=coalesce(nullif(p->>'id','')::uuid,gen_random_uuid());
+ insert into projects(id,fiscal_year_id,name,description,start_date,end_date,status,created_by) values(new_id,y,p->>'name',p->>'description',nullif(p->>'start_date','')::date,nullif(p->>'end_date','')::date,p->>'status',actor) on conflict(id) do update set name=excluded.name,description=excluded.description,start_date=excluded.start_date,end_date=excluded.end_date,status=excluded.status where projects.fiscal_year_id=y;
+ delete from project_departments where project_id=new_id;
+ insert into project_departments(project_id,department_id) select new_id,value::uuid from jsonb_array_elements_text(p->'department_ids');result:=jsonb_build_object('id',new_id);
+ elsif command='PROJECT_MEMBER' then
+ if exists(select 1 from fiscal_years where id=y and is_closed) then raise exception 'Closed year is read-only.'; end if;
+ if not exists(select 1 from projects pr join project_departments pd on pd.project_id=pr.id where pr.id=(p->>'project_id')::uuid and pr.fiscal_year_id=y and pd.department_id=(p->>'department_id')::uuid) then raise exception 'Project department mismatch.'; end if;
+ insert into project_members(project_id,user_id,department_id) values((p->>'project_id')::uuid,(p->>'user_id')::uuid,(p->>'department_id')::uuid) on conflict(project_id,user_id) do update set department_id=excluded.department_id;result:=p;
+ elsif command='DEPARTMENT' then
+ insert into departments(code,name,is_active) values(p->>'code',p->>'name',(p->>'is_active')::boolean) on conflict(code) do update set name=excluded.name,is_active=excluded.is_active returning to_jsonb(departments.*) into result;
+ elsif command='SETTING' then
+ select to_jsonb(s.*) into prior from organization_settings s where key=p->>'key';
+ insert into organization_settings(key,value) values(p->>'key',p->'value') on conflict(key) do update set value=excluded.value;result:=p;
+ elsif command='REQUEST_TYPE' then
+ update request_types set name=p->>'name',description=p->>'description',is_active=(p->>'is_active')::boolean,creates_commitment=(p->>'creates_commitment')::boolean,process_config=coalesce(p->'process_config','{}') where id=(p->>'id')::uuid;result:=p;
+ elsif command='REQUIREMENT' then
+ insert into document_requirements(request_type_id,document_code,label,is_required,condition_type,condition_json,display_order,template_url) values((p->>'request_type_id')::uuid,p->>'document_code',p->>'label',(p->>'is_required')::boolean,nullif(p->>'condition_type',''),p->'condition_json',coalesce((p->>'display_order')::integer,0),nullif(p->>'template_url','')) on conflict(request_type_id,document_code) do update set label=excluded.label,is_required=excluded.is_required,condition_type=excluded.condition_type,condition_json=excluded.condition_json,display_order=excluded.display_order,template_url=excluded.template_url;result:=p;
+ else raise exception 'Unknown admin command.'; end if;
+ insert into audit_logs(actor_user_id,action,entity_type,entity_id,fiscal_year_id,department_id,old_data,new_data) values(actor,command,'admin',null,active_y,d,prior,result);return result;
+end $$;
+commit;
+
+-- Additive migration: Sheets request register; keep financial records and RLS.
+-- Apply after 004. Safe to reapply. Do not rerun migration 001 on an existing DB.
+begin;
+create table if not exists public.request_register_sync (
+ request_id uuid primary key references public.requests(id) on delete cascade,
+ version bigint not null default 1,
+ synced_version bigint not null default 0,
+ last_error text,
+ synced_at timestamptz,
+ next_attempt_at timestamptz not null default now(),
+ updated_at timestamptz not null default now()
+);
+alter table public.request_register_sync enable row level security;
+revoke all on public.request_register_sync from public,anon,authenticated;
+grant select on public.request_register_sync to authenticated;
+grant all on public.request_register_sync to service_role;
+drop policy if exists register_finance_read on public.request_register_sync;
+create policy register_finance_read on public.request_register_sync for select to authenticated
+ using(public.finance_request(request_id));
+create table if not exists public.request_register_lease (
+ id boolean primary key default true check(id), token uuid, expires_at timestamptz
+);
+alter table public.request_register_lease enable row level security;
+revoke all on public.request_register_lease from public,anon,authenticated;
+grant all on public.request_register_lease to service_role;
+insert into public.request_register_lease(id) values(true) on conflict do nothing;
+
+create or replace function public.enqueue_request_register() returns trigger
+language plpgsql security definer set search_path=public as $$ begin
+ if new.reference_code is not null and new.status<>'DRAFT' then
+  insert into request_register_sync(request_id) values(new.id)
+  on conflict(request_id) do update set version=request_register_sync.version+1,
+   updated_at=now(),next_attempt_at=now();
+ end if;
+ return new;
+end $$;
+revoke all on function public.enqueue_request_register() from public,anon,authenticated;
+drop trigger if exists enqueue_request_register on public.requests;
+create trigger enqueue_request_register after insert or update of status,title,amount,source_folder_url,updated_at
+ on public.requests for each row execute function public.enqueue_request_register();
+insert into public.request_register_sync(request_id)
+ select id from public.requests where reference_code is not null and status<>'DRAFT'
+ on conflict do nothing;
+
+create or replace function public.claim_request_register_lease() returns uuid
+language plpgsql security definer set search_path=public as $$ declare claimed uuid; begin
+ update request_register_lease set token=gen_random_uuid(),expires_at=clock_timestamp()+interval '120 seconds'
+ where id and (expires_at is null or expires_at<clock_timestamp()) returning token into claimed;
+ return claimed;
+end $$;
+create or replace function public.renew_request_register_lease(p_token uuid) returns boolean
+language plpgsql security definer set search_path=public as $$ begin
+ update request_register_lease set expires_at=clock_timestamp()+interval '120 seconds'
+ where id and token=p_token and expires_at>clock_timestamp(); return found;
+end $$;
+create or replace function public.pending_request_register_jobs(p_request_id uuid default null)
+returns setof public.request_register_sync language sql security definer set search_path=public as $$
+ select q.* from request_register_sync q where q.version>q.synced_version
+ and (p_request_id is null or q.request_id=p_request_id)
+ and (p_request_id is not null or q.next_attempt_at<=now())
+ order by q.updated_at limit 3;
+$$;
+create or replace function public.release_request_register_lease(p_token uuid) returns void
+language sql security definer set search_path=public as $$
+ update request_register_lease set token=null,expires_at=null where id and token=p_token;
+$$;
+create or replace function public.finish_request_register_sync(p_token uuid,p_request_id uuid,p_version bigint,p_error text default null) returns boolean
+language plpgsql security definer set search_path=public as $$ begin
+ if not exists(select 1 from request_register_lease where id and token=p_token and expires_at>clock_timestamp()) then return false; end if;
+ if p_error is null then
+  update request_register_sync set synced_version=greatest(synced_version,p_version),synced_at=now(),
+   last_error=case when version=p_version then null else last_error end
+   where request_id=p_request_id and version>=p_version;
+ else
+  update request_register_sync set last_error=left(p_error,500),next_attempt_at=now()+interval '5 minutes'
+   where request_id=p_request_id and version=p_version;
+ end if;
+ return found;
+end $$;
+revoke all on function public.claim_request_register_lease() from public,anon,authenticated;
+revoke all on function public.pending_request_register_jobs(uuid) from public,anon,authenticated;
+revoke all on function public.renew_request_register_lease(uuid) from public,anon,authenticated;
+revoke all on function public.release_request_register_lease(uuid) from public,anon,authenticated;
+revoke all on function public.finish_request_register_sync(uuid,uuid,bigint,text) from public,anon,authenticated;
+grant execute on function public.claim_request_register_lease(),public.renew_request_register_lease(uuid),
+ public.release_request_register_lease(uuid),public.finish_request_register_sync(uuid,uuid,bigint,text) to service_role;
+grant execute on function public.pending_request_register_jobs(uuid) to service_role;
+
+-- Retire only the old archive prerequisite. Document verification, notes,
+-- budget overrides, atomic commitments and authorization remain in the engine.
+do $$ declare definition text; obsolete text := $guard$if r.drive_copy_status<>'COPIED' and notes is null then raise exception 'Official documents have not been archived; override reason required.'; end if;$guard$;
+begin
+ definition:=pg_get_functiondef('public.finance_engine_internal(uuid,text,jsonb)'::regprocedure);
+ if position(obsolete in definition)>0 then execute replace(definition,obsolete,'-- Documents are reviewed from the submitted folder; no archive prerequisite.');
+ elsif position('Official documents have not been archived' in definition)>0 then raise exception 'Unexpected finance engine definition; archive guard was not safely removed.';
+ end if;
+end $$;
+-- Preserve these historical columns/tables; stop producing old copy alerts.
+update public.discrepancies set status='RESOLVED',resolved_at=now(),resolution_notes='Drive copying retired; supporting documents are reviewed from the submitted folder.'
+ where code='DRIVE_COPY_FAILED' and status='OPEN';
+commit;

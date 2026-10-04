@@ -72,13 +72,9 @@ export interface FinanceRequest {
   status: Status;
   source_folder_url: string | null;
   source_folder_id: string | null;
-  official_folder_url: string | null;
-  official_folder_id: string | null;
-  drive_copy_status: string;
-  drive_error_message: string | null;
-  archive_batch: string;
   created_at: string;
   submitted_at: string | null;
+  updated_at?: string;
 }
 export interface Project {
   id: string;

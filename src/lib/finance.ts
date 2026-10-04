@@ -38,7 +38,30 @@ export function requiredDocuments(list: Requirement[], amount: string) {
 }
 export const isFinance = (role: Role) =>
   role === "CFO_ADMIN" || role === "OCFO_MEMBER";
+const labels: Record<string, string> = {
+  CFO_ADMIN: "Finance Administrator",
+  OCFO_MEMBER: "Finance Administrator",
+  DEPARTMENT_MEMBER: "Member",
+  PROJECT_MEMBER: "Member",
+  UNDER_OCFO_REVIEW: "Under Finance Review",
+  NEEDS_REVISION: "Incomplete",
+  PROCESSING: "Approved",
+  COMPLETED: "Approved",
+  READY_FOR_CFO: "For Approval",
+  INTERNAL_OCFO: "Internal Finance Note",
+  REQUESTER_VISIBLE: "Message to Department",
+  PROJECT_END_REVENUE: "Project-End / Revenue Submission",
+  DISBURSEMENT_ACCREDITED: "Accredited Disbursement",
+  DISBURSEMENT_UNACCREDITED: "Unaccredited Disbursement",
+  PENDING_REVIEW: "Pending Review",
+  HAS_COMMENTS: "Changes Suggested",
+  NONE: "No Recommendation",
+  REVISION: "Request Revision",
+  FAILED: "Needs Attention",
+  PENDING: "Pending",
+};
 export const human = (value: string) =>
+  labels[value] ??
   value
     .toLowerCase()
     .replaceAll("_", " ")
@@ -65,4 +88,7 @@ export function allowedTargets(status: Status, role: Role): Status[] {
   )
     result.push("CANCELLED");
   return result;
+}
+export function visibleTargets(status: Status, role: Role): Status[] {
+  return allowedTargets(status, role).filter(target => !isFinance(role) || ["APPROVED", "REJECTED", "NEEDS_REVISION"].includes(target));
 }

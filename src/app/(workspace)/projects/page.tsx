@@ -7,22 +7,33 @@ export default async function Projects({
   searchParams: Promise<{ year?: string }>;
 }) {
   const p = await searchParams;
-  const w = await workspace(p.year);
+  const w = await workspace(p.year, [
+    "departments",
+    "projects",
+    "projectDepartments",
+  ]);
   return (
     <>
       <PageHeader
         title="Projects"
-        description="Connect your financial activity to the work it makes possible. Budgets stay with departments."
+        description={
+          w.role === "DEPARTMENT_MEMBER"
+            ? "Projects linked to your department."
+            : "AEA projects."
+        }
+        action={
+          w.role === "CFO_ADMIN" && !w.readOnly ? (
+            <Link className="button primary" href="/admin?tab=projects">
+              + Add Project
+            </Link>
+          ) : undefined
+        }
       />
       {w.projects.length ? (
         <div className="department-grid">
           {w.projects.map((pr) => (
-            <Panel title={pr.name} subtitle={pr.description ?? ""} key={pr.id}>
+            <Panel title={pr.name} key={pr.id}>
               <Badge value={pr.status} />
-              <p className="muted">
-                {pr.start_date ?? "No start date"} —{" "}
-                {pr.end_date ?? "No end date"}
-              </p>
               <p>
                 {w.projectDepartments
                   .filter((pd) => pd.project_id === pr.id)
@@ -34,7 +45,7 @@ export default async function Projects({
                   .join(" · ")}
               </p>
               <Link className="text-link" href={`/projects/${pr.id}`}>
-                View project ↗
+                Open
               </Link>
             </Panel>
           ))}
@@ -42,8 +53,8 @@ export default async function Projects({
       ) : (
         <Panel title="Project directory">
           <Empty
-            title="Make room for your next project"
-            description="CFO administrators can create projects and assign participating departments in Administration."
+            title="No projects are currently linked to your department."
+            description="Ask Finance to link a project."
           />
         </Panel>
       )}

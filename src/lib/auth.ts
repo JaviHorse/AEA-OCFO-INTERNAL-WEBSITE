@@ -3,6 +3,8 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { serverClient, serviceClient } from "./supabase/server";
 import { env } from "./env";
+import { emailDomainAllowed } from "./email-access";
+import { isAdmin } from "./permissions";
 import type { Membership, Year, Role } from "./types";
 export const session = cache(async function session() {
   const db = await serverClient();
@@ -12,11 +14,15 @@ export const session = cache(async function session() {
   if (!user) redirect("/login");
   const admin = serviceClient();
   const [{ data: settings }, { data: year, error }] = await Promise.all([
-    admin.from("organization_settings").select("value").eq("key", "allowed_email_domain").maybeSingle(),
+    admin
+      .from("organization_settings")
+      .select("value")
+      .eq("key", "allowed_email_domain")
+      .maybeSingle(),
     admin.from("fiscal_years").select("*").eq("is_active", true).maybeSingle(),
   ]);
   const domain = settings?.value ?? env().ALLOWED_EMAIL_DOMAIN;
-  if (user.email?.toLowerCase().split("@")[1] !== domain)
+  if (!emailDomainAllowed(user.email, domain))
     redirect("/access-denied");
   if (error)
     throw new Error(
@@ -28,9 +34,10 @@ export const session = cache(async function session() {
     .select("*")
     .eq("fiscal_year_id", year.id)
     .eq("email", user.email!.toLowerCase())
-    .eq("is_active", true);
+    .eq("is_active", true)
+    .order("id");
   if (membershipError) throw new Error("Membership lookup failed.");
-  if (!memberships?.length) redirect("/access-denied");
+  if (!memberships?.length) redirect("/register");
   const priority: Role[] = [
     "CFO_ADMIN",
     "OCFO_MEMBER",
@@ -48,7 +55,7 @@ export const session = cache(async function session() {
     role: sorted[0].role,
   };
 });
-export async function yearContext(id?: string) {
+export const yearContext = cache(async function yearContext(id?: string) {
   const s = await session();
   const yearId = id ?? s.activeYear.id;
   if (yearId === s.activeYear.id) {
@@ -71,7 +78,8 @@ export async function yearContext(id?: string) {
     .select("*")
     .eq("fiscal_year_id", yearId)
     .eq("email", s.user.email!.toLowerCase())
-    .eq("is_active", true);
+    .eq("is_active", true)
+    .order("id");
   const list = (memberships ?? []) as Membership[];
   const priority: Role[] = [
     "CFO_ADMIN",
@@ -89,7 +97,7 @@ export async function yearContext(id?: string) {
       : list[0]?.role,
     readOnly: (year as Year).is_closed,
   };
-}
+});
 export async function requireFinance(yearId?: string, adminOnly = false) {
   const s = await yearContext(yearId);
   if (
@@ -99,5 +107,10 @@ export async function requireFinance(yearId?: string, adminOnly = false) {
   )
     throw new Error("You do not have permission for this action.");
   if (s.readOnly) throw new Error("This fiscal year is closed and read-only.");
+  return s;
+}
+export async function requireAdminPage() {
+  const s = await session();
+  if (!isAdmin(s.role)) redirect("/dashboard");
   return s;
 }

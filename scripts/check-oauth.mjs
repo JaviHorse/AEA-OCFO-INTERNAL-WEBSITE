@@ -10,7 +10,7 @@ console.log(
     googleEnabled: data.external?.google,
     supabaseGoogleCallback: `${base}/auth/v1/callback`,
     appCallback: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`,
-    allowedDomain: process.env.ALLOWED_EMAIL_DOMAIN,
+    allowedDomains: [process.env.ALLOWED_EMAIL_DOMAIN ?? "student.ateneo.edu", "gmail.com"],
   }),
 );
 const url = new URL(`${base}/auth/v1/authorize`);
@@ -19,10 +19,7 @@ url.searchParams.set(
   "redirect_to",
   `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`,
 );
-url.searchParams.set(
-  "hd",
-  process.env.ALLOWED_EMAIL_DOMAIN ?? "student.ateneo.edu",
-);
+url.searchParams.set("prompt", "select_account");
 const response = await fetch(url, { redirect: "manual" });
 const location = response.headers.get("location");
 if (location) {

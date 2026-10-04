@@ -2,7 +2,7 @@ import "server-only";
 import { serviceClient } from "./supabase/server";
 import { cents } from "./finance";
 import { notifyEvent } from "./email";
-import { getFileMetadata, listFolderFiles } from "./google-drive";
+import { listFolderFiles } from "./google-drive";
 import type { FinanceRequest } from "./types";
 type Candidate = {
   fiscal_year_id: string;
@@ -82,53 +82,6 @@ export async function reconcileYear(yearId: string) {
           "WARNING",
           "The submitted source folder is now empty.",
         );
-      const { data: documents, error } = await db
-        .from("drive_documents")
-        .select("*")
-        .eq("request_id", r.id)
-        .eq("archive_batch", r.archive_batch);
-      if (error)
-        throw new Error("Could not inspect archived document metadata.");
-      for (const doc of (documents ?? []).slice(0, 10)) {
-        if (doc.source_file_id && doc.source_modified_time) {
-          const current = await getFileMetadata(doc.source_file_id);
-          if (
-            current.modifiedTime &&
-            new Date(current.modifiedTime).getTime() >
-              new Date(doc.source_modified_time).getTime()
-          )
-            flag(
-              yearId,
-              r.department_id,
-              "requests",
-              r.id,
-              "SOURCE_CHANGED",
-              "WARNING",
-              "Source files changed after the official copy. Review the archived version before relying on source documents.",
-            );
-        }
-        if (
-          r.approved_at &&
-          doc.official_file_id &&
-          doc.official_modified_time
-        ) {
-          const current = await getFileMetadata(doc.official_file_id);
-          if (
-            current.modifiedTime &&
-            new Date(current.modifiedTime).getTime() >
-              new Date(doc.official_modified_time).getTime()
-          )
-            flag(
-              yearId,
-              r.department_id,
-              "requests",
-              r.id,
-              "DOCUMENT_CHANGED_AFTER_APPROVAL",
-              "HIGH",
-              "Official supporting documents changed after approval.",
-            );
-        }
-      }
     } catch {
       flag(
         yearId,
@@ -182,16 +135,6 @@ export async function reconcileYear(yearId: string) {
         "REQUEST_EXCEEDS_AVAILABLE",
         "HIGH",
         "Request amount exceeds available department funds.",
-      );
-    if (r.drive_copy_status === "FAILED")
-      flag(
-        yearId,
-        r.department_id,
-        "requests",
-        r.id,
-        "DRIVE_COPY_FAILED",
-        "CRITICAL",
-        "Official document copy failed.",
       );
     if (
       ["APPROVED", "PROCESSING"].includes(r.status) &&

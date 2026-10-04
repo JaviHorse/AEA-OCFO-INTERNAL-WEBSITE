@@ -5,7 +5,7 @@ export function oauthErrorMessage(code?: string): string {
     case "origin_mismatch":
       return "Open the address configured in NEXT_PUBLIC_APP_URL before signing in. If you changed the localhost port, update .env.local and Supabase’s allowed redirect URLs, then restart the app.";
     case "access_denied":
-      return "Google sign-in was cancelled or access was denied. Try again with your Ateneo Google account. If Google blocks the app, check its OAuth audience and test users.";
+      return "Google sign-in was cancelled or access was denied. Try again with your enrolled Ateneo or Gmail account. If Google blocks the app, check its OAuth audience and test users.";
     case "provider_disabled":
       return "Google sign-in is not enabled in Supabase. Enable the Google provider in Authentication settings.";
     case "bad_oauth_state":

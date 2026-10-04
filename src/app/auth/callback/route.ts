@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { serviceClient } from "@/lib/supabase/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { env } from "@/lib/env";
+import { emailDomainAllowed } from "@/lib/email-access";
 import { safeOauthErrorCode, classifyOauthError } from "@/lib/oauth-errors";
 import { mkdir, writeFile } from "node:fs/promises";
 export async function GET(request: NextRequest) {
@@ -74,8 +75,7 @@ export async function GET(request: NextRequest) {
         .eq("key", "allowed_email_domain")
         .maybeSingle();
       if (
-        u.email?.toLowerCase().split("@")[1] !==
-        (setting?.value ?? env().ALLOWED_EMAIL_DOMAIN)
+        !emailDomainAllowed(u.email, setting?.value ?? env().ALLOWED_EMAIL_DOMAIN)
       ) {
         await db.auth.signOut();
         return finish("/access-denied");
@@ -88,11 +88,20 @@ export async function GET(request: NextRequest) {
         updated_at: new Date().toISOString(),
       });
       if (profileError) return finish("/login?error=database");
-      await admin
+      const { error: linkError } = await admin
         .from("memberships")
         .update({ user_id: u.id })
         .eq("email", u.email!.toLowerCase());
-      return finish("/dashboard");
+      if (linkError) return finish("/login?error=database");
+      const { data: memberships, error: membershipError } = await admin
+        .from("memberships")
+        .select("id,fiscal_years!inner(is_active)")
+        .eq("email", u.email!.toLowerCase())
+        .eq("is_active", true)
+        .eq("fiscal_years.is_active", true)
+        .limit(1);
+      if (membershipError) return finish("/login?error=database");
+      return finish(memberships?.length ? "/dashboard" : "/register");
     }
   }
   return NextResponse.redirect(new URL("/login?error=missing_code", origin));

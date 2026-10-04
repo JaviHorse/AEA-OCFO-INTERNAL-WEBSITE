@@ -1,6 +1,6 @@
 ﻿"use client";
 import { useState } from "react";
-export function LoginButton() {
+export function LoginButton({ label = "Continue with Google" }: { label?: string }) {
   const [loading, setLoading] = useState(false);
   return (
     <form
@@ -27,7 +27,7 @@ export function LoginButton() {
             d="M12 5.95c1.47 0 2.79.5 3.82 1.5l2.87-2.87A9.6 9.6 0 0 0 12 2a10 10 0 0 0-8.93 5.49l3.34 2.59C7.2 7.71 9.4 5.95 12 5.95Z"
           />
         </svg>
-        {loading ? "Connecting…" : "Continue with Google"}
+        {loading ? "Connecting…" : label}
       </button>
     </form>
   );

@@ -3,7 +3,9 @@ import { Resend } from "resend";
 import { env } from "./env";
 import { serviceClient } from "./supabase/server";
 import { money, human } from "./finance";
+import { notificationText } from "./ux";
 import type { FinanceRequest } from "./types";
+import { isGmailDecision, sendDecisionNotification } from "./gmail-notifications";
 const escape = (text: string) =>
   text.replace(
     /[&<>"']/g,
@@ -74,8 +76,8 @@ export async function notify(
       {
         from: sender,
         to: recipient,
-        subject: `${r.reference_code}: ${human(event)}`,
-        html: `<h2>AEA Finance · ${escape(human(event))}</h2><p>${escape(r.title)}</p>${info.map(([k, v]) => `<p><strong>${k}</strong>: ${escape(v)}</p>`).join("")}<p><a href="${escape(env().NEXT_PUBLIC_APP_URL)}/requests/${r.id}">View request and review instructions</a></p>${r.official_folder_url ? `<p><a href="${escape(r.official_folder_url)}">Official Drive documents</a></p>` : ""}${r.source_folder_url ? `<p><a href="${escape(r.source_folder_url)}">Submission folder</a></p>` : ""}`,
+        subject: `${r.reference_code ?? "AEA Finance"}: ${notificationText(event)}`,
+        html: `<h2>${escape(notificationText(event))}</h2><p>${escape(r.title)}</p>${info.map(([k, v]) => `<p><strong>${k}</strong>: ${escape(v)}</p>`).join("")}<p><a href="${escape(env().NEXT_PUBLIC_APP_URL)}/requests/${r.id}">Open your request for details and next steps</a></p>${r.source_folder_url ? `<p><a href="${escape(r.source_folder_url)}">Submission folder</a></p>` : ""}`,
       },
       { idempotencyKey: record.id },
     );
@@ -132,6 +134,7 @@ export async function financeRecipients(yearId: string) {
   ].filter((x) => typeof x === "string") as string[];
 }
 export async function notifyEvent(event: string, r: FinanceRequest) {
+  if (isGmailDecision(event)) return sendDecisionNotification(event, r);
   const db = serviceClient();
   const { data: user } = await db
     .from("users")

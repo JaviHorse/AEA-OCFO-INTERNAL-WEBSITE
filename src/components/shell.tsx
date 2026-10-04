@@ -6,28 +6,28 @@ import {
   Building2,
   FolderKanban,
   FileText,
-  ArrowLeftRight,
   ChartNoAxesCombined,
   BookOpen,
   Settings,
   Landmark,
   LogOut,
-  ChevronDown,
   Menu,
-  ArrowUpRight,
+  CheckCheck,
 } from "lucide-react";
 import { useState } from "react";
 import type { Role, Year } from "@/lib/types";
-import { human } from "@/lib/finance";
+import { isAdmin } from "@/lib/permissions";
+import { navigationFor } from "@/lib/ux";
 import { signOut } from "@/app/actions";
 const items = [
-  ["Dashboard", "/dashboard", LayoutDashboard],
-  ["Departments", "/departments", Building2],
-  ["Projects", "/projects", FolderKanban],
-  ["Requests", "/requests", FileText],
-  ["Transactions", "/transactions", ArrowLeftRight],
-  ["Reports", "/reports", ChartNoAxesCombined],
-  ["Finance guide", "/guide", BookOpen],
+  ["Dashboard", "/dashboard", LayoutDashboard, ""],
+  ["Finance Requests", "/requests", FileText, "REQUESTS"],
+  ["Approvals", "/approvals", CheckCheck, "REQUESTS"],
+  ["Reports", "/reports", ChartNoAxesCombined, "FINANCE"],
+  ["Departments", "/departments", Building2, "ORGANIZATION"],
+  ["Projects", "/projects", FolderKanban, "ORGANIZATION"],
+  ["Help & Requirements", "/guide", BookOpen, "SUPPORT"],
+  ["Administration", "/admin", Settings, "SYSTEM"],
 ] as const;
 export function Shell({
   children,
@@ -35,30 +35,39 @@ export function Shell({
   years,
   name,
   email,
+  department,
 }: {
   children: React.ReactNode;
   role: Role;
   years: Year[];
   name: string;
   email: string;
+  department: string;
 }) {
-  const path = usePathname();
-  const params = useSearchParams();
-  const router = useRouter();
+  const path = usePathname(),
+    params = useSearchParams(),
+    router = useRouter();
   const [open, setOpen] = useState(false);
+  const admin = isAdmin(role);
   const selected =
     years.find((y) => y.id === params.get("year")) ??
     years.find((y) => y.is_active);
-  const initial = name
-    .split(" ")
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join("");
   const yearQuery =
     selected && !selected.is_active ? `?year=${selected.id}` : "";
+  const links = items.filter(([, url]) => navigationFor(role).includes(url));
   return (
     <div className="app-shell">
-      <aside className={`sidebar ${open ? "open" : ""}`}>
+      <a href="#workspace-content" className="skip-link">
+        Skip to content
+      </a>
+      {open && (
+        <button
+          className="sidebar-scrim"
+          aria-label="Close navigation"
+          onClick={() => setOpen(false)}
+        />
+      )}
+      <aside id="main-navigation" className={`sidebar ${open ? "open" : ""}`}>
         <Link href="/dashboard" className="brand">
           <span className="brand-icon">
             <Landmark size={23} />
@@ -67,52 +76,46 @@ export function Shell({
             AEA<span className="brand-sub">FINANCE</span>
           </span>
         </Link>
-        <div className="sidebar-context">
-          <span className="eyebrow">WORKSPACE</span>
-          <strong>Ateneo Economics Association</strong>
-          <span>
-            Office of the CFO <span className="live-dot" />
-          </span>
-        </div>
         <nav aria-label="Main navigation">
-          <span className="nav-label">OVERVIEW</span>
-          {items.map(([label, url, Icon]) => (
-            <Link
-              key={url}
-              href={`${url}${yearQuery}`}
-              className={`nav-item ${path.startsWith(url) ? "active" : ""}`}
-              onClick={() => setOpen(false)}
-            >
-              <Icon size={18} />
-              {label}
-              {path.startsWith(url) && <span className="nav-active-dot" />}
-            </Link>
-          ))}
-          {role === "CFO_ADMIN" && (
-            <>
-              <span className="nav-label admin-label">MANAGEMENT</span>
+          {links.map(([label, url, Icon, group], index) => (
+            <div key={url}>
+              {admin && group && group !== links[index - 1]?.[3] && (
+                <span className="nav-label">{group}</span>
+              )}
               <Link
-                href="/admin"
-                className={`nav-item ${path.startsWith("/admin") ? "active" : ""}`}
+                href={`${url}${yearQuery}`}
+                className={`nav-item ${path.startsWith(url) ? "active" : ""}`}
+                aria-current={path.startsWith(url) ? "page" : undefined}
+                onClick={() => setOpen(false)}
               >
-                <Settings size={18} />
-                Administration
+                <Icon size={18} />
+                {!admin && url === "/requests" ? "Requests" : label}
               </Link>
-            </>
-          )}
+            </div>
+          ))}
         </nav>
-        <div className="sidebar-bottom">
-          <div className="sidebar-help">
-            <BookOpen size={18} />
-            <strong>A little guidance goes a long way.</strong>
-            <p>Find requirements and answers in the finance guide.</p>
-            <Link href="/guide">
-              Open the guide <ArrowUpRight size={14} />
-            </Link>
-          </div>
-          <span className="sidebar-footer">
-            AEA FINANCE · BUILT FOR CONTINUITY
-          </span>
+        <div className="sidebar-bottom portal-identity">
+          <Link href="/profile" className="nav-item">
+            <span className="avatar">
+              {name
+                .split(" ")
+                .map((w) => w[0])
+                .slice(0, 2)
+                .join("")}
+            </span>
+            <span>
+              <strong>{name}</strong>
+              <small>
+                {admin ? "Finance Administrator" : `${department} Member`}
+              </small>
+            </span>
+          </Link>
+          <form action={signOut}>
+            <button className="nav-item" aria-label={`Sign out ${email}`}>
+              <LogOut size={17} />
+              Sign Out
+            </button>
+          </form>
         </div>
       </aside>
       <div className="main-area">
@@ -121,59 +124,33 @@ export function Shell({
             <button
               className="mobile-toggle"
               aria-label="Toggle navigation"
+              aria-expanded={open}
+              aria-controls="main-navigation"
               onClick={() => setOpen(!open)}
             >
               <Menu />
             </button>
-            <span>Workspace</span>
-            <span className="slash">/</span>
-            <strong>
-              {path.startsWith("/admin")
-                ? "Administration"
-                : (items.find(([, url]) => path.startsWith(url))?.[0] ??
-                  "Finance")}
-            </strong>
           </div>
-          <div className="topbar-right">
-            <label className="year-select">
-              <span className="live-dot" />
-              <select
-                aria-label="Fiscal year"
-                value={selected?.id ?? ""}
-                onChange={(e) => {
-                  const q = new URLSearchParams(params);
-                  q.set("year", e.target.value);
-                  router.push(`${path}?${q}`);
-                }}
-              >
-                {years.map((y) => (
-                  <option key={y.id} value={y.id}>
-                    {y.label}
-                    {y.is_closed ? " · Closed" : ""}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={13} />
-            </label>
-            <div className="profile">
-              <span className="avatar">{initial}</span>
-              <div>
-                <strong>{name}</strong>
-                <small>{human(role)}</small>
-              </div>
-            </div>
-            <form action={signOut}>
-              <button
-                className="signout"
-                aria-label={`Sign out ${email}`}
-                title="Sign out"
-              >
-                <LogOut size={17} />
-              </button>
-            </form>
-          </div>
+          <label className="year-select">
+            <select
+              aria-label="Fiscal year"
+              value={selected?.id ?? ""}
+              onChange={(e) => {
+                const q = new URLSearchParams(params);
+                q.set("year", e.target.value);
+                router.push(`${path}?${q}`);
+              }}
+            >
+              {years.map((y) => (
+                <option key={y.id} value={y.id}>
+                  {y.label}
+                  {y.is_closed ? " · Closed" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
         </header>
-        <main className="main-content">
+        <main id="workspace-content" className="main-content" tabIndex={-1}>
           {selected?.is_closed && (
             <div className="alert">
               This fiscal year is archived. Its records are read-only.
@@ -182,7 +159,7 @@ export function Shell({
           {children}
           <footer className="content-footer">
             <span>Ateneo Economics Association</span>
-            <span>Thoughtful decisions. Accountable finances.</span>
+            <span>AEA Finance</span>
           </footer>
         </main>
       </div>

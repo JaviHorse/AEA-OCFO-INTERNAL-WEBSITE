@@ -10,18 +10,24 @@ export default function ErrorPage({
     <main className="center-page">
       <div className="panel denied">
         <h1>We couldn’t load this workspace.</h1>
-        <p>
-          Check that the database migration and seed have been applied and your
-          active membership is configured.
-        </p>
-        <p className="muted">
-          {process.env.NODE_ENV === "development"
-            ? error.message
-            : `Reference: ${error.digest ?? "unavailable"}`}
-        </p>
+        <p>Try again. If this continues, contact Finance.</p>
+        {process.env.NODE_ENV === "development" ? (
+          <details>
+            <summary>Administrator diagnostics</summary>
+            <p className="muted">{error.message}</p>
+          </details>
+        ) : (
+          <p className="muted">Reference: {error.digest ?? "unavailable"}</p>
+        )}
         <button className="button primary" onClick={reset}>
           Try again
         </button>
+        <a
+          className="button secondary"
+          href="mailto:aea.college.org@student.ateneo.edu"
+        >
+          Contact Finance
+        </a>
       </div>
     </main>
   );

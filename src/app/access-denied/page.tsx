@@ -7,15 +7,12 @@ export default function AccessDenied() {
       <div className="panel denied">
         <ShieldX size={42} />
         <h1>Access needs a membership.</h1>
-        <p>
-          Your Google account must belong to an active AEA membership for the
-          current fiscal year. Contact OCFO to confirm your department and role.
-        </p>
+        <p>Contact Finance to enable access for your Google account.</p>
         <a
           className="button primary"
           href="mailto:aea.college.org@student.ateneo.edu"
         >
-          Contact OCFO
+          Contact Finance
         </a>
         <form action={signOut}>
           <button className="button secondary">Sign out</button>

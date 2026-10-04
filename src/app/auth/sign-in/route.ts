@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       options: {
         redirectTo: `${origin}/auth/callback`,
         skipBrowserRedirect: true,
-        queryParams: { hd: e.ALLOWED_EMAIL_DOMAIN, prompt: "select_account" },
+        queryParams: { prompt: "select_account" },
       },
     });
     response = NextResponse.redirect(
