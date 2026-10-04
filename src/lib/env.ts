@@ -5,7 +5,6 @@ const schema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.url(),
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().min(10),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(10),
-  RESEND_API_KEY: z.string().min(5).optional(),
   ALLOWED_EMAIL_DOMAIN: z.string().default("student.ateneo.edu"),
   FINANCE_NOTIFICATION_EMAIL: z.email(),
 });

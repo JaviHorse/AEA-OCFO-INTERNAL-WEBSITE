@@ -68,7 +68,7 @@ Configure Supabase Google OAuth with `/auth/callback` on your local and producti
 
 The Sheets service account needs Editor access to the configured spreadsheet. The register tab must have exactly these headers: **Reference, Request, Amount, Status, Updated, Action**. Applicants’ original Drive folders are linked for manual verification. Failed register writes stay queued and can be retried from request details or the scheduled job.
 
-Use **Administration → Settings** to connect the organization Gmail sender. Configure a verified Resend sender for finance alerts and reminders. See [deployment instructions](docs/deployment.md) for production environment variables, callbacks, and scheduled maintenance.
+Authorize the organization Gmail sender locally as CFO, then configure its refresh token on Vercel. Resend alerts/reminders are optional: leave `RESEND_FROM_EMAIL` unset until a verified domain is available. Gmail approval/rejection/revision emails continue independently. Set both Resend sender and API key and redeploy to enable those alerts later. See [deployment instructions](docs/deployment.md) for configuration, disabled notification details, callbacks, and scheduled maintenance.
 
 ## Validation
 

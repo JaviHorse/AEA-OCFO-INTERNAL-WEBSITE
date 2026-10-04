@@ -1,5 +1,15 @@
 import { createClient } from "@supabase/supabase-js";
 
+if (
+  !process.env.RESEND_FROM_EMAIL?.trim() ||
+  !process.env.RESEND_API_KEY?.trim()
+) {
+  console.log(
+    "INFO: Resend disabled: RESEND_FROM_EMAIL or RESEND_API_KEY is missing. Optional alerts/reminders are skipped; Gmail decision emails use check:gmail.",
+  );
+  process.exit(0);
+}
+
 const db = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -14,11 +24,25 @@ const [setting, notifications] = await Promise.all([
   db
     .from("notifications")
     .select("delivery_status")
-    .in("event_type", ["APPROVED", "REJECTED", "NEEDS_REVISION"])
+    .in("event_type", [
+      "NEW_SUBMISSION",
+      "SUBMISSION_CONFIRMATION",
+      "READY_FOR_CFO",
+      "UNDER_OCFO_REVIEW",
+      "PROCESSING",
+      "COMPLETED",
+      "CANCELLED",
+      "MISSING_REQUIRED_DOCUMENT",
+      "CRITICAL_DISCREPANCY",
+      "PROJECT_END_DUE_SOON",
+      "PROJECT_END_OVERDUE",
+    ])
     .order("created_at", { ascending: false })
     .limit(100),
 ]);
-const sender = setting.data?.value || process.env.RESEND_FROM_EMAIL;
+const sender =
+  (typeof setting.data?.value === "string" && setting.data.value.trim()) ||
+  process.env.RESEND_FROM_EMAIL?.trim();
 const email =
   typeof sender === "string"
     ? (sender.match(/<([^>]+)>/)?.[1] || sender).trim()
@@ -35,7 +59,7 @@ else {
   for (const row of notifications.data ?? [])
     counts[row.delivery_status] = (counts[row.delivery_status] || 0) + 1;
   console.log(
-    `Recent decision notification delivery counts: ${JSON.stringify(counts)}`,
+    `Recent Resend alert/reminder delivery counts: ${JSON.stringify(counts)}`,
   );
 }
 if (!email)

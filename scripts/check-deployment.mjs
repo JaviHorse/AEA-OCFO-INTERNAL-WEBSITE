@@ -30,7 +30,6 @@ if (process.argv.includes("--production")) {
     "GOOGLE_GMAIL_REDIRECT_URI",
     "GOOGLE_GMAIL_REFRESH_TOKEN",
     "GOOGLE_GMAIL_SENDER",
-    "RESEND_API_KEY",
   ];
   for (const name of requiredProduction)
     check(`Production ${name}`, Boolean(process.env[name]));
@@ -86,6 +85,11 @@ if (process.argv.includes("--production")) {
     ),
   );
 }
+console.log(
+  process.env.RESEND_FROM_EMAIL?.trim() && process.env.RESEND_API_KEY?.trim()
+    ? "INFO: Resend enabled; verify its sender domain separately before sending."
+    : "INFO: Resend disabled (sender or API key missing); optional alerts/reminders will be skipped. Gmail decision delivery remains required.",
+);
 if (required.every((name) => process.env[name])) {
   const db = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,

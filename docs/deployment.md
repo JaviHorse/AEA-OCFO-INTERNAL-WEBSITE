@@ -4,7 +4,7 @@ Follow this guide in order. Replace `https://aea-finance.vercel.app` with your s
 
 ## 1. Prepare your accounts and release
 
-You need a GitHub repository containing the app, lockfile, public assets, and migrations; a Vercel account allowed to import it; the existing Supabase project; Google Cloud access to the integrations; the request-register spreadsheet; the organization mailbox; and a verified Resend sending address/domain. For a custom domain, also prepare DNS access. Choose a Vercel plan suitable for the organization and check its current usage limits.
+You need a GitHub repository containing the app, lockfile, public assets, and migrations; a Vercel account allowed to import it; the existing Supabase project; Google Cloud access to the integrations; the request-register spreadsheet; and the organization mailbox. A verified Resend sender/domain is optional and can be added later. For a custom domain, also prepare DNS access. Choose a Vercel plan suitable for the organization and check its current usage limits.
 
 Keep `.env.local`, `GDrive_key.json`, and tokens out of GitHub. Do not reset the existing database or rerun seed/bootstrap scripts over its records. Commit and push the reviewed release changes after running:
 
@@ -64,15 +64,15 @@ In **Vercel → Project → Settings → Environment Variables**, select **Produ
 | `GOOGLE_GMAIL_CLIENT_ID`, `GOOGLE_GMAIL_CLIENT_SECRET` | Separate organization Gmail OAuth client                                                                       |
 | `GOOGLE_GMAIL_REDIRECT_URI`                            | Exact callback used for local sender authorization, normally `http://localhost:3000/api/google/gmail/callback` |
 | `GOOGLE_GMAIL_REFRESH_TOKEN`, `GOOGLE_GMAIL_SENDER`    | Connected organization sender                                                                                  |
-| `RESEND_API_KEY`                                       | Finance alert/reminder email service                                                                           |
-| `RESEND_FROM_EMAIL`                                    | Verified sender fallback; can also be configured in Administration                                             |
+| `RESEND_API_KEY`                                       | Optional; needed only when enabling Resend finance alerts/reminders.                                           |
+| `RESEND_FROM_EMAIL`                                    | Optional; a verified sender explicitly enables Resend when an API key is also present.                         |
 | `CRON_SECRET`                                          | Long random secret for the scheduled maintenance endpoint                                                      |
 
 `GOOGLE_IMPERSONATED_USER` is optional and requires Workspace domain-wide delegation. `DATABASE_URL` and bootstrap settings are needed only when running SQL setup tools, not for the web app. Production never reads the local `GDrive_key.json` file.
 
 Get Supabase URL/keys from that project's API settings. Use the service-account JSON's `client_email` and complete `private_key` for the two Google service-account variables, not the whole JSON document. Keep BEGIN/END lines; real line breaks or literal `\n` escapes are supported. The spreadsheet ID is between `/d/` and `/edit` in its URL; the numeric sheet ID is the tab's `gid`, often `0`.
 
-Use your full production HTTPS origin for `NEXT_PUBLIC_APP_URL`, without a path or trailing slash. Set `RESEND_FROM_EMAIL` to a verified sender such as `AEA Finance <finance@your-verified-domain.org>`; Administration can override it. Generate a strong cron secret locally:
+Use your full production HTTPS origin for `NEXT_PUBLIC_APP_URL`, without a path or trailing slash. Leave `RESEND_FROM_EMAIL` unset until you have a verified domain. To enable Resend later, set it to a verified sender such as `AEA Finance <finance@your-verified-domain.org>` and set `RESEND_API_KEY`, then redeploy. Administration can override the sender only after these environment variables enable Resend. Generate a strong cron secret locally:
 
 ```powershell
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
@@ -86,7 +86,7 @@ Do not set `NODE_ENV` manually. Use separate databases, spreadsheets, and test i
 2. In **Authentication → Sign In / Providers → Google**, confirm Google is enabled with the login OAuth client. Copy the Supabase callback shown there, normally `https://YOUR_PROJECT.supabase.co/auth/v1/callback`.
 3. In Google Cloud's login OAuth Web application client, add that **Supabase callback** to **Authorized redirect URIs**. It is different from this app's `/auth/callback`. If JavaScript origins are configured, include the production origin. Confirm the consent/audience settings allow intended users.
 4. Enable Drive and Sheets APIs in the service account's project. Share the register with `GOOGLE_SERVICE_ACCOUNT_EMAIL` as **Editor**. Confirm the numeric tab exists and preserve expected register headers. Share supporting folders with the integration account as **Viewer**. A member's own access does not imply service-account access.
-5. Verify the Resend sender domain and its required DNS records, then configure the sender/finance recipients.
+5. When enabling optional Resend emails, verify its sender domain/DNS records, then configure the sender/finance recipients. Skip this step while Resend is disabled.
 
 See [Supabase redirect URL configuration](https://supabase.com/docs/guides/auth/redirect-urls).
 
@@ -105,6 +105,25 @@ The app allows Gmail authorization only in development with a signed-in CFO. Pro
 If already authorized, retain the working client/token pair and verify it. External OAuth apps left in **Testing** normally issue seven-day refresh tokens for Gmail scopes. Configure an appropriate production audience/status and complete Google's verification requirements for your usage; tokens can also be revoked by mailbox/account changes. See [Google token expiration](https://developers.google.com/identity/protocols/oauth2#expiration).
 
 Run `npm run check:integrations` and `npm run check:email` locally to inspect Sheets/Resend configuration. Read their output: these diagnostics do not convert every provider failure into a failing exit code. Restricted Resend sending keys may not list domains; confirm sender verification in Resend's dashboard. These commands use local variables, not Vercel settings, and do not prove real email delivery.
+
+## Launch without Resend
+
+`RESEND_FROM_EMAIL` and `RESEND_API_KEY` are optional for deployment. If either is missing or blank, Resend delivery is disabled before recipient/database/provider work, without FAILED notification records or deployment failure. Gmail remains required and continues requester approval, rejection, and revision emails. Finance actions, database audit history, on-screen request status, discrepancies, Drive checks, and Sheets synchronization still work.
+
+The following emails are not sent while Resend is disabled:
+
+| Events                                                      | Recipients and notification                                                                       |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `NEW_SUBMISSION`                                            | Configured Finance recipients, active CFOs, and extra notification recipients: new request alert. |
+| `SUBMISSION_CONFIRMATION`                                   | Requester: submission confirmation.                                                               |
+| `READY_FOR_CFO`                                             | Finance recipients: request ready for CFO approval.                                               |
+| `UNDER_OCFO_REVIEW`, `PROCESSING`, `COMPLETED`, `CANCELLED` | Requester: corresponding status update.                                                           |
+| `MISSING_REQUIRED_DOCUMENT`                                 | Requester: required document marked unverified.                                                   |
+| `CRITICAL_DISCREPANCY`                                      | Finance recipients: critical discrepancy alert.                                                   |
+| `PROJECT_END_DUE_SOON`                                      | Representative request's requester: project-end report due soon.                                  |
+| `PROJECT_END_OVERDUE`                                       | Representative request's requester and Finance recipients: overdue project-end report.            |
+
+Skipped emails are not queued for backfill. After configuring verified sender/key values and redeploying, new events and eligible future reminders use Resend again. Verify any Administration sender override also belongs to a verified domain. For launch testing, require Gmail decision delivery; defer Resend alert delivery checks until it is enabled.
 
 ## Deploy and set the final domain
 

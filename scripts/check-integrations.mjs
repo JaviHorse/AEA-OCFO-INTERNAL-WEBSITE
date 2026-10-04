@@ -44,13 +44,21 @@ try {
     "Sheets register: unavailable. Enable the Sheets API and verify Editor sharing with the service account.",
   );
 }
-try {
-  const res = await fetch("https://api.resend.com/domains", {
-    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
-  });
+if (
+  !process.env.RESEND_FROM_EMAIL?.trim() ||
+  !process.env.RESEND_API_KEY?.trim()
+) {
   console.log(
-    `Resend: ${res.ok ? "key connected" : `verification unavailable (HTTP ${res.status}; restricted sending keys may not list domains)`}`,
+    "Resend: optional alerts/reminders disabled; sender or API key missing.",
   );
-} catch {
-  console.log("Resend: network unavailable.");
-}
+} else
+  try {
+    const res = await fetch("https://api.resend.com/domains", {
+      headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
+    });
+    console.log(
+      `Resend: ${res.ok ? "key connected" : `verification unavailable (HTTP ${res.status}; restricted sending keys may not list domains)`}`,
+    );
+  } catch {
+    console.log("Resend: network unavailable.");
+  }

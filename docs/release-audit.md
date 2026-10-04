@@ -12,7 +12,7 @@
 
 ## Verification
 
-Lint, TypeScript, and all **29 automated tests** passed. Tests cover financial arithmetic, database migrations and role isolation, server authorization, OAuth handling, integration retries, and large histories. Reconciliation was exercised with 1,250 requests and 1,203 related transactions; CSV export with 1,203 records and a simulated response cap below the requested batch size.
+Lint, TypeScript, and all **31 automated tests** passed. Tests cover financial arithmetic, database migrations and role isolation, server authorization, OAuth handling, integration retries, optional Resend delivery and production validation, and large histories. Reconciliation was exercised with 1,250 requests and 1,203 related transactions; CSV export with 1,203 records and a simulated response cap below the requested batch size.
 
 Desktop and mobile fixture checks passed across the workspace and account screens, including expanded sections, fonts, navigation, budget controls, and closed-year behavior. Fixtures do not verify production sign-in credentials or provider permissions.
 
@@ -25,6 +25,8 @@ The production build completed successfully, including TypeScript and route gene
 After the owner applied migration 007, a new read-only check verified that `department_request_totals` is accessible, exactly one open fiscal year exists, and an active CFO membership exists for it. The previous migration blocker is resolved. See the expanded [Vercel deployment instructions](deployment.md).
 
 The shared form field no longer clones server-rendered controls in a client component to inject generated IDs. Native wrapping labels preserve association across the RSC boundary. A real Next.js hydration regression check verifies server and client controls, accessible labels, and form interaction without browser console errors. Browser scripts also support Linux CI rather than assuming a Windows Edge path.
+
+Resend is optional for launch. Missing/blank environment sender or API key skips its alerts/reminders before notification inserts or provider work, while Gmail decisions remain routed independently. A database sender override alone cannot enable Resend. Both production validation and a full optimized build passed regression checks with Resend values absent/blank. Re-enabling Resend preserves delivery history for real provider failures; skipped events are not queued for backfill. See the deployment guide for the complete disabled-email list.
 
 Configure production environment variables, OAuth callbacks, provider sharing, and the cron secret. Run `npm run check:deployment -- --production` against that configuration, then perform the production smoke checks listed in the deployment guide. This audit did not deploy the site, change hosted financial records, or send real notifications.
 

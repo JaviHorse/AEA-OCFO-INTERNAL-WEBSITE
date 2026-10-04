@@ -5,6 +5,7 @@ import { serviceClient } from "./supabase/server";
 import { money, human } from "./finance";
 import { notificationText } from "./ux";
 import type { FinanceRequest } from "./types";
+import { resendConfiguration } from "./resend-config";
 import {
   isGmailDecision,
   sendDecisionNotification,
@@ -22,6 +23,8 @@ export async function notify(
   r: FinanceRequest,
   recipient: string,
 ) {
+  const configuration = resendConfiguration();
+  if (!configuration) return { ok: true, disabled: true };
   const db = serviceClient();
   const { data: record, error: insertError } = await db
     .from("notifications")
@@ -42,9 +45,9 @@ export async function notify(
       .select("value")
       .eq("key", "resend_from_email")
       .maybeSingle();
-    const sender = setting?.value ?? process.env.RESEND_FROM_EMAIL;
-    if (!sender)
-      throw new Error("Configure a verified Resend sender in Admin settings.");
+    const sender =
+      (typeof setting?.value === "string" && setting.value.trim()) ||
+      configuration.sender;
     const [
       { data: dept },
       { data: type },
@@ -75,7 +78,7 @@ export async function notify(
       ["Project", project?.name ?? "Non-project"],
       ["Status", human(r.status)],
     ];
-    const result = await new Resend(env().RESEND_API_KEY).emails.send(
+    const result = await new Resend(configuration.apiKey).emails.send(
       {
         from: sender,
         to: recipient,
@@ -138,6 +141,9 @@ export async function financeRecipients(yearId: string) {
 }
 export async function notifyEvent(event: string, r: FinanceRequest) {
   if (isGmailDecision(event)) return sendDecisionNotification(event, r);
+  // Disabled delivery is intentional, not a failed/queued notification. Avoid
+  // recipient queries and repeated FAILED rows during scheduled reminders.
+  if (!resendConfiguration()) return { ok: true, disabled: true };
   const db = serviceClient();
   const { data: user } = await db
     .from("users")
