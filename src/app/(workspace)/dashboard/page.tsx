@@ -69,10 +69,15 @@ export default async function Dashboard({
         ["Revenue", money(total("actual_revenue"))],
       ]
     : ([
-        ["Available Budget", money(total("available_funds"))],
+        [
+          "Total Amount Requested",
+          money(
+            w.totalRequested.reduce((sum, amount) => sum + cents(amount), 0n),
+          ),
+        ],
         ["Pending Requests", pending],
       ].filter(
-        ([label, value]) => label === "Available Budget" || value !== 0,
+        ([label, value]) => label === "Total Amount Requested" || value !== 0,
       ) as [string, string | number][]);
   const queues: [string, number, string][] = [
     ["New Requests", w.submitted, `/requests?${query}&status=SUBMITTED`],
@@ -119,7 +124,16 @@ export default async function Dashboard({
         </Panel>
       )}
       {admin ? (
-        <Panel title="Financial Summary">
+        <Panel
+          title="Financial Summary"
+          action={
+            w.role === "CFO_ADMIN" ? (
+              <Link className="text-link" href="/admin?tab=finance">
+                Manage Finances →
+              </Link>
+            ) : undefined
+          }
+        >
           <div className="summary-grid">
             {metrics.map(([label, value]) => (
               <div key={label}>
@@ -133,7 +147,7 @@ export default async function Dashboard({
         <div className="metrics-grid">
           {metrics.map(([label, value]) => (
             <div
-              className={`metric-card ${label.startsWith("Available") ? "highlight" : ""}`}
+              className={`metric-card ${label === "Total Amount Requested" ? "highlight" : ""}`}
               key={label}
             >
               <div className="metric-top">{label}</div>
@@ -146,12 +160,14 @@ export default async function Dashboard({
         <>
           <NeedsAttention items={attention} />
           <details className="budget-explanation">
-            <summary>How is my available budget calculated?</summary>
+            <summary>What does total amount requested include?</summary>
             <p>
-              Current budget {money(total("current_budget"))}, minus expenses{" "}
-              {money(total("actual_expenses"))} and committed funds{" "}
-              {money(total("active_commitments"))}. Revenue is tracked
-              separately.
+              The combined amounts of your department’s submitted requests for{" "}
+              {w.year.label}, including approved, completed, and rejected
+              requests. Drafts and cancelled requests are excluded. Negative
+              budget changes reduce the total. This is a request total, not the
+              department’s budget or spending balance. Budget balances are
+              confidential to OCFO.
             </p>
           </details>
         </>
@@ -168,10 +184,9 @@ export default async function Dashboard({
           requests={requests.slice(0, 5)}
           departments={w.departments}
           types={w.requestTypes}
-          filters={false}
+
           finance={admin}
           yearId={w.year.id}
-          readOnly={!file}
         />
       </Panel>
     </>

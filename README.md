@@ -1,21 +1,40 @@
 # AEA Finance
 
-Next.js App Router / TypeScript finance operations platform built from all 40 pages of `Finance Website Requirements.pdf`. Uses Supabase PostgreSQL and Google OAuth, a Google Sheets request register with submitted Drive-folder links, and Resend notification delivery.
+A finance portal for the Ateneo Economics Association. Members file and track requests; OCFO reviews supporting documents; the CFO manages approvals and departmental allocations. The interface follows AEA’s visual identity, with responsive layouts and accessible expandable sections.
 
-## Local development
+## Features
 
-```powershell
-npm install
+- Department and project requests with supporting Google Drive folder links.
+- Document verification, private OCFO reviews, and messages visible to applicants.
+- Audited approval, revision, rejection, cancellation, and transaction workflows.
+- Confidential department budgets and a member dashboard showing requested amounts.
+- Fiscal-year turnover with read-only historical years.
+- Request summaries and a streamed CSV compilation.
+- A retryable Google Sheets register, Gmail decision messages, and finance alerts.
+
+## Stack
+
+Next.js 16 App Router, React 19, TypeScript, Supabase PostgreSQL/Auth, Google Drive/Sheets/Gmail APIs, and Resend. Financial commands run atomically in PostgreSQL. Row-level security controls database reads, and privileged mutations verify the acting user on the server and in the database.
+
+## Local setup
+
+Use Node.js 22.13+ or Node.js 24 and npm.
+
+```bash
+npm ci
+```
+
+Copy `.env.example` to `.env.local` and fill in your project’s values. Initialize Supabase using the instructions below, configure Google sign-in, then start the app:
+
+```bash
 npm run dev
 ```
 
-Open http://localhost:3000. The existing `.env.local` and `GDrive_key.json` are ignored by Git and consumed only by server integration modules. Never copy those files into source control.
+Open [localhost:3000](http://localhost:3000). Credentials, local diagnostics, generated screenshots, and build output are ignored by Git.
 
-## Initialize Supabase
+## Database setup
 
-The provided Supabase project is reachable but the finance tables were absent during verification. API service-role credentials do not grant PostgreSQL schema-management access.
-
-Apply these files in Supabase's SQL editor in this order:
+For a **new database**, apply these files in Supabase’s SQL editor, in order:
 
 1. `supabase/migrations/001_finance.sql`
 2. `supabase/seed.sql`
@@ -23,83 +42,61 @@ Apply these files in Supabase's SQL editor in this order:
 4. `supabase/migrations/003_allow_personal_gmail.sql`
 5. `supabase/migrations/004_portal_registration.sql`
 6. `supabase/migrations/005_google_sheets_register.sql`
-6. `scripts/bootstrap.sql`, **after replacing the example fiscal-year dates and CFO email with your actual values**.
+7. `supabase/migrations/006_performance_indexes.sql`
+8. `supabase/migrations/007_confidential_budgets.sql`
+9. `scripts/bootstrap.sql`, after replacing the example dates and CFO email.
 
-Alternatively, add `DATABASE_URL`, `INITIAL_CFO_EMAIL`, `INITIAL_FISCAL_YEAR_LABEL`, `INITIAL_FISCAL_YEAR_CODE`, `INITIAL_FISCAL_YEAR_START`, and `INITIAL_FISCAL_YEAR_END` to `.env.local`, then run:
+For an **existing database**, apply only missing migrations. Never rerun the original schema or reset an existing database to upgrade it.
 
-```powershell
-npm run db:setup
-```
+Alternatively, configure `DATABASE_URL` and the `INITIAL_CFO_EMAIL` / `INITIAL_FISCAL_YEAR_*` settings described in `.env.example`, then run `npm run db:setup`. Supabase API keys cannot apply SQL migrations.
 
-For an existing database, apply only migrations you have not applied; do not rerun the original schema or the fresh-install bundle. Migration 004 preserves the atomic finance engine and adds registration and the Admin filing restriction.
+Migration 007 is required for database-level budget confidentiality and CFO budget updates. The member dashboard can still calculate request totals before it is installed, but that compatibility fallback does not replace the database permissions migration.
 
-New Ateneo Google users sign in, choose one active department at `/register`, and become Members. Registration cannot grant Admin access, overwrite an existing membership, bypass deactivation, or change departments. Gmail accounts remain available when enrolled by an Admin. An existing Admin signs in directly to the review dashboard. Admins cannot file or resubmit applicant requests, including through server actions or the database command. Finance Administrator privileges must be assigned through bootstrap or audited Admin management.
+## Roles and financial records
 
-Administration → Registered Users supports reassignment, deactivation, and confirmed Admin designation. Membership history stays intact across fiscal years. Existing Finance roles share the Admin interface but retain their original backend privileges; legacy reviewers do not gain final approval or administration permission. Members see Dashboard, Requests, Projects, and Help & Requirements. Admins have Approvals and Department Budgets in addition to their finance management pages.
+Members register with an eligible Ateneo Google account and one department. Administrators can enroll eligible Gmail accounts, reassign or deactivate memberships, and grant CFO access through audited controls.
 
-Supabase Google OAuth must include `http://localhost:3000/auth/callback` in its allowed redirect URLs; the Google OAuth client redirects to Supabase's auth callback.
+- **Member:** Dashboard, Requests, Projects, and Help & Requirements.
+- **OCFO:** Finance review and document verification, subject to existing role restrictions.
+- **CFO:** Final decisions, finance administration, fiscal years, and configuration.
 
-## Drive and email setup
+Under **Administration → Finance**, the CFO can update a department allocation with a reason and record actual expenses or revenue against eligible approved requests. Budget adjustments retain history and reject stale edits. Spent, Revenue, Committed, and Available are calculated from their underlying records. Closed fiscal years remain read-only.
 
-All request types are recorded in the configured Google Sheets tab with Reference, Request, Amount, Status, Updated, Action. Reference links to the app; Action links to the applicant's original Drive folder. The Request cell's note includes department, requester, request type and project. Applicants keep folders shared for manual Finance verification. There are no AEA Drive copies, archive folders, archive retries, or Drive-root settings.
+## Integrations
 
-Enable the **Google Sheets API** in the service account's Google Cloud project. The service account needs Editor access to the register and Reader access to applicant folders. Local development uses the existing `GDrive_key.json`; production uses `GOOGLE_SERVICE_ACCOUNT_EMAIL` and `GOOGLE_PRIVATE_KEY`. Configure `GOOGLE_REQUESTS_SPREADSHEET_ID` and `GOOGLE_REQUESTS_SHEET_ID` (numeric gid; default 0). `NEXT_PUBLIC_APP_URL` controls request hyperlinks; use the deployed HTTPS URL in production. Run `npm run check:register` to verify API/header access and migration readiness.
+Configure Supabase Google OAuth with `/auth/callback` on your local and production app URLs. The Google sign-in client redirects to Supabase’s callback URL; organization Gmail authorization uses the separate `/api/google/gmail/callback` route.
 
-Apply migration 005 once using the Supabase SQL editor. It removes only the archive prerequisite from approval, keeps document/budget checks, and adds a durable versioned queue with a database lease. Submission and status changes sync promptly. Resubmission updates the same reference instead of inserting another row. Failures remain queued; Finance can retry in request detail and the cron retries a bounded batch. Existing submitted requests are queued when the migration is installed. Existing historical archive columns/tables are retained for audit compatibility, without new copying.
+The Sheets service account needs Editor access to the configured spreadsheet. The register tab must have exactly these headers: **Reference, Request, Amount, Status, Updated, Action**. Applicants’ original Drive folders are linked for manual verification. Failed register writes stay queued and can be retried from request details or the scheduled job.
 
-The register is a shared Finance view, not an authorization boundary or an approval input. Changes made manually to Sheet statuses do not alter app approvals or balances. Keep the Finance sheet restricted to appropriate Finance members. Supabase remains authoritative for identity, department access, approvals, transactions, budgets, and audit logs.
+Use **Administration → Settings** to connect the organization Gmail sender. Configure a verified Resend sender for finance alerts and reminders. See [deployment instructions](docs/deployment.md) for production environment variables, callbacks, and scheduled maintenance.
 
-## Financial and authorization model
+## Validation
 
-- Department budgets are authoritative; projects never have independent balances.
-- `NUMERIC(14,2)` stores money; application arithmetic uses integer cents.
-- Available funds = approved budget + approved adjustments − actual expenses − active commitments. Revenue remains separate.
-- CFO-only final approval does not require unanimous peer review. Approval, commitment creation, budget adjustments, transactions, and releases run through atomic PostgreSQL RPCs with role revalidation and department locks.
-- Browser access is read-only and protected by RLS. Server actions validate input and execute narrowly scoped finance/admin commands. Internal OCFO comments and review notes are excluded from department reads.
-- Project membership alone does not grant department finance access.
-- Recorded expenses reduce commitments. Completion releases unused funds. Overruns create critical discrepancies; negative availability requires an audited CFO override.
-- Memberships and records are fiscal-year aware. Closed years are read-only. Activate a succeeding year with a CFO assigned, reconcile the previous year's requests/commitments/issues, then close it.
-- No hard deletion or client-side budget mutation is exposed. Rejected/cancelled records retain their history.
-
-## Reconciliation and reminders
-
-The daily Vercel cron endpoint `/api/cron/reconcile` requires `CRON_SECRET`. It checks negative funds, budget overruns, excessive requests, transaction overruns, terminal commitments, wrong-department/unlinked transactions, long-open requests and overdue project-end reports. It also checks source folder access and emptiness for five requests per run and retries up to three pending Sheets recordings. Larger submissions still need manual review. Thresholds and reminder days are editable. OCFO can flag document/receipt mismatches, suspected duplicates, changed documents, and other issues manually; no OCR or invoice parsing is claimed.
-
-## Verification
-
-```powershell
-npm test
-npm run typecheck
+```bash
+npm run check          # lint, TypeScript, and unit/database tests
+npm run format:check
+npm run test:ux        # browser fixtures; install Chromium first
 npm run build
-npm run check:integrations
-npm run check:security
+npm run check:security # scan the production browser assets
+npm run check:deployment
 ```
 
-Tests execute the actual migration and finance RPCs in a local PostgreSQL-compatible database. They cover department isolation, unauthorized users, internal comment privacy, CFO decisions, document overrides, duplicate transactions, exact money arithmetic, budget adjustments, commitment release, closed-year writes, and the strict PDAF threshold. The browser smoke script `node scripts/browser-check.mjs` uses locally installed Chrome; change its executable path on other systems.
+For browser checks, run `npx playwright install chromium` once. Tests use isolated fixtures and an in-memory PostgreSQL-compatible database; they do not send email or modify cloud finance records. GitHub Actions runs the same validation on pushes and pull requests.
 
-Live OAuth, Sheets request recording, and actual email delivery require database initialization, the first membership, an enabled Sheets API, a shared request register and a verified sender. Read-only integration checks do not prove those complete workflows.
+## Repository layout
 
-## Deployment
+```text
+src/app/              Routes, server actions, layouts, and theme styles
+src/components/       Shared interface components
+src/lib/              Authorization, finance rules, queries, and integrations
+supabase/migrations/  Ordered database migrations
+supabase/seed.sql      Reference configuration
+public/brand/         AEA logo and mascots
+public/fonts/         Locally hosted fonts and their licenses
+scripts/              Setup and operational checks
+scripts/diagnostics/  Optional development diagnostics and measurements
+tests/                Finance, access, query, integration, and browser fixtures
+docs/                 Deployment instructions and audit findings
+```
 
-Import the repository into Vercel, configure the variables from `.env.example`, set `NEXT_PUBLIC_APP_URL` to the Vercel URL, and add that callback URL in Supabase. Configure `CRON_SECRET` for the daily reminder job. Existing keys stay server-only; production uses environment-based Google credentials.
-
-
-## Organization Gmail decision notifications
-
-Approval, rejection and Incomplete/revision requester notifications now use Gmail OAuth, not Resend. Supabase login and the Drive/Sheets service account are unchanged. Other email events retain their existing Resend delivery.
-
-Configure GOOGLE_GMAIL_CLIENT_ID, GOOGLE_GMAIL_CLIENT_SECRET, GOOGLE_GMAIL_REDIRECT_URI, GOOGLE_GMAIL_REFRESH_TOKEN and GOOGLE_GMAIL_SENDER in server environment variables. GOOGLE_GMAIL_SENDER selects the sender; the token must belong to that exact account. For temporary testing, set it to javier.macasaet@student.ateneo.edu. When changing senders, clear the old refresh token and authorize the new account. No Gmail JSON credential file is used.
-
-Local setup:
-1. Ensure the organization sender is added under Google Auth Platform > Audience > Test users while the OAuth app is External / Testing.
-2. Use the Gmail Web OAuth client's ID and secret, and register http://localhost:3000/api/google/gmail/callback as an exact redirect URI.
-3. Start npm run dev and sign in to AEA Finance as the CFO_ADMIN approving Administrator.
-4. Visit http://localhost:3000/api/google/gmail/authorize. Consent must be granted by the account configured in GOOGLE_GMAIL_SENDER. The flow requests gmail.send plus openid/email to verify the sender identity. This does not change the existing Supabase login.
-5. The callback verifies the Google ID token, scope, sender, PKCE and actor-bound state, then saves the refresh token directly in the ignored .env.local file. Tokens are never displayed in pages or printed to logs. Restart the dev server.
-6. Run npm run check:gmail for a read-only sender/queue readiness check. Use an actual consenting test request to verify delivery; the diagnostic sends no messages.
-
-Sender authorization routes are setup-only and require CFO_ADMIN. They are deliberately disabled outside local development; hosted Vercel instances must receive the locally authorized refresh token through encrypted Vercel environment variables. This avoids displaying secrets or trying to write a read-only deployment filesystem. Set GOOGLE_GMAIL_REDIRECT_URI to the deployment's exact /api/google/gmail/callback URI and register it on the OAuth client before deployment. The refresh token remains tied to the OAuth client, so use the same client ID/secret on Vercel. Set NEXT_PUBLIC_APP_URL to the deployed site's URL, then redeploy.
-
-Google External / Testing apps requesting Gmail scopes receive refresh tokens that expire after seven days. Complete the appropriate Google publishing/verification setup before unattended production use, or reconnect locally when the token expires. See https://developers.google.com/identity/protocols/oauth2#expiration . Workspace organization policy may require administrator approval for the Gmail scope.
-
-Finance RPCs commit before notifications. Gmail failures cannot roll back or report the committed decision as a failed approval. The Admin receives a non-blocking warning, and notifications records REQUEST_APPROVED, REQUEST_REJECTED or REQUEST_NEEDS_REVISION with SENT/FAILED, provider_message_id and a safe failure summary. Gmail is identified by these event types; no database schema migration is required. Missing requester email is logged as FAILED with an empty recipient. No client-supplied recipient or internal comments enter requester email templates.
+Production request lists are paginated, report downloads stream in batches, and reconciliation processes related records in bounded batches. Authenticated data is not stored in a shared fetch cache. Historical financial and audit records are retained; maintenance does not automatically delete them. See the [release audit](docs/release-audit.md) for validation results and remaining deployment requirements.

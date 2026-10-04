@@ -5,7 +5,10 @@ import { serviceClient } from "./supabase/server";
 import { money, human } from "./finance";
 import { notificationText } from "./ux";
 import type { FinanceRequest } from "./types";
-import { isGmailDecision, sendDecisionNotification } from "./gmail-notifications";
+import {
+  isGmailDecision,
+  sendDecisionNotification,
+} from "./gmail-notifications";
 const escape = (text: string) =>
   text.replace(
     /[&<>"']/g,
@@ -152,7 +155,11 @@ export async function notifyEvent(event: string, r: FinanceRequest) {
     recipients.push(...(await financeRecipients(r.fiscal_year_id)));
   if (!recipients.length)
     throw new Error("No notification recipient is configured.");
-  await Promise.all(recipients.map((email) => notify(event, r, email!)));
+  const unique = [...new Set(recipients)];
+  for (let offset = 0; offset < unique.length; offset += 5)
+    await Promise.all(
+      unique.slice(offset, offset + 5).map((email) => notify(event, r, email)),
+    );
 }
 export const sendNewSubmissionNotification = (r: FinanceRequest) =>
   notifyEvent("NEW_SUBMISSION", r);

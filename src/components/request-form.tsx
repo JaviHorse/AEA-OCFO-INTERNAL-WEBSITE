@@ -52,7 +52,7 @@ export function RequestForm({
       types.find((t) => t.code === initialType || t.id === initialType)?.id ??
       "",
   );
-  const [department, setDepartment] = useState(
+  const [department] = useState(
     existing?.department_id ?? departments[0]?.id ?? "",
   );
   const [project, setProject] = useState(existing?.project_id ?? "");
@@ -518,7 +518,8 @@ export function RequestForm({
             {selected?.creates_commitment
               ? "Funds are reserved only after Finance approval, not when you submit."
               : "Finance will review this request before Finance decides."}{" "}
-            Your request will be recorded in the Finance sheet. Finance will review the files in your submitted folder.
+            Your request will be recorded in the Finance sheet. Finance will
+            review the files in your submitted folder.
           </p>
         </Panel>
       )}

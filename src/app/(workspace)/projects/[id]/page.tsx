@@ -5,12 +5,17 @@ import { workspace } from "@/lib/data";
 import { money, human, isFinance } from "@/lib/finance";
 import { PageHeader, Panel, Badge } from "@/components/ui";
 import { RequestTable } from "@/components/request-table";
+import { pageNumber } from "@/lib/page-data";
+import { HistoryPagination } from "@/components/history-pagination";
 export default async function ProjectDetail({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ page?: string }>;
 }) {
   const { id } = await params;
+  const page = pageNumber((await searchParams)?.page);
   const s = await session();
   const { data: p } = await s.db
     .from("projects")
@@ -22,13 +27,12 @@ export default async function ProjectDetail({
     p.fiscal_year_id,
     [
       "departments",
-      "projects",
       "projectDepartments",
       "requests",
       "requestTypes",
       "transactions",
     ],
-    { projectId: id },
+    { projectId: id, page },
   );
   const [{ data: members }, { data: reports }] = await Promise.all([
     w.db.from("project_members").select("*").eq("project_id", id),
@@ -50,6 +54,12 @@ export default async function ProjectDetail({
         description={
           p.description ?? "Project financial activity by charged department."
         }
+      />
+      <HistoryPagination
+        href={`/projects/${id}`}
+        year={w.year.id}
+        page={page}
+        count={w.historyCount}
       />
       <Panel title="Project overview">
         <Badge value={p.status} />
@@ -86,10 +96,9 @@ export default async function ProjectDetail({
           requests={w.requests.filter((r) => r.project_id === id)}
           departments={w.departments}
           types={w.requestTypes}
-          filters={false}
+
           finance={isFinance(w.role)}
           yearId={w.year.id}
-          readOnly={w.readOnly || w.yearRole !== "DEPARTMENT_MEMBER"}
         />
       </Panel>
       {isFinance(w.role) && (
@@ -142,10 +151,7 @@ export default async function ProjectDetail({
             </Link>
           )}
           {isFinance(w.role) && (
-            <Link
-              className="text-link"
-              href={`/reports?year=${w.year.id}`}
-            >
+            <Link className="text-link" href={`/reports?year=${w.year.id}`}>
               View Request Summaries
             </Link>
           )}

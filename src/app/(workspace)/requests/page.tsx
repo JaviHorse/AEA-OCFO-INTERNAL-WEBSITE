@@ -60,16 +60,15 @@ export default async function Requests({
         />
         <RequestTable
           filteredEmpty={hasRequestFilters(p)}
-          filters={false}
+
           key={`${p.status ?? ""}-${p.department ?? ""}-${p.type ?? ""}-${w.year.id}`}
           requests={w.requests}
           queue={finance ? "inbox" : "all"}
           departments={w.departments}
           types={w.requestTypes}
-          projects={w.projects}
+
           yearId={w.year.id}
           finance={finance}
-          readOnly={w.readOnly || w.yearRole !== "DEPARTMENT_MEMBER"}
         />
       </section>
     </>

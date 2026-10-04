@@ -31,6 +31,15 @@ export const timedDatabaseFetch: typeof fetch = async (input, init) => {
     match
       ? `supabase.${match[1].startsWith("auth") ? "auth" : url.pathname.includes("/rpc/") ? "rpc" : "query"}.${match[2]}`
       : "supabase.http",
-    () => fetch(input, init),
+    // Never retain an authenticated response in Next's persistent fetch cache.
+    // A deadline also prevents an unavailable backend from holding a worker open.
+    () =>
+      fetch(input, {
+        ...init,
+        cache: "no-store",
+        signal: init?.signal
+          ? AbortSignal.any([init.signal, AbortSignal.timeout(20000)])
+          : AbortSignal.timeout(20000),
+      }),
   );
 };

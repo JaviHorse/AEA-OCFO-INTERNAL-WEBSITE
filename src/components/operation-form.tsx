@@ -3,6 +3,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   adminAction,
+  recordTransaction,
+  setDepartmentBudget,
   saveGuide,
   resolveIssue,
   submitReport,
@@ -20,7 +22,14 @@ export function OperationForm({
 }: {
   children: React.ReactNode;
   command?: string;
-  kind?: "admin" | "guide" | "resolve" | "report" | "member";
+  kind?:
+    | "admin"
+    | "guide"
+    | "resolve"
+    | "report"
+    | "member"
+    | "transaction"
+    | "budget";
   defaults?: Record<string, unknown>;
   label?: string;
   confirm?: boolean;
@@ -30,21 +39,24 @@ export function OperationForm({
   const [result, setResult] = useState<ActionResult | null>(null);
   const [confirmation, setConfirmation] = useState<{
     data: Record<string, unknown>;
-    form: HTMLFormElement;
   } | null>(null);
   const destructive = command === "CLOSE_YEAR" || kind === "resolve";
-  function perform(data: Record<string, unknown>, form: HTMLFormElement) {
+  function perform(data: Record<string, unknown>) {
     start(async () => {
       const r =
-        kind === "member"
-          ? await manageRegisteredUser(data)
-          : kind === "admin"
-          ? await adminAction(command!, data)
-            : kind === "guide"
-              ? await saveGuide(data)
-              : kind === "resolve"
-                ? await resolveIssue(data)
-                : await submitReport(data);
+        kind === "transaction"
+          ? await recordTransaction(data)
+          : kind === "budget"
+            ? await setDepartmentBudget(data)
+            : kind === "member"
+              ? await manageRegisteredUser(data)
+              : kind === "admin"
+                ? await adminAction(command!, data)
+                : kind === "guide"
+                  ? await saveGuide(data)
+                  : kind === "resolve"
+                    ? await resolveIssue(data)
+                    : await submitReport(data);
       setResult(r);
       setConfirmation(null);
       if (r.ok) {
@@ -65,10 +77,9 @@ export function OperationForm({
           if (el instanceof HTMLInputElement) {
             if (el.type === "checkbox") data[el.name] = el.checked;
             else if (el.type === "number")
-              data[el.name] =
-                kind === "report"
-                  ? el.value
-                  : Number(el.value);
+              data[el.name] = ["report", "transaction", "budget"].includes(kind)
+                ? el.value
+                : Number(el.value);
           }
           if (el instanceof HTMLSelectElement && el.multiple)
             data[el.name] = Array.from(el.selectedOptions).map((o) => o.value);
@@ -98,8 +109,8 @@ export function OperationForm({
             : {};
           delete data.condition_amount;
         }
-        if (confirm) setConfirmation({ data, form });
-        else perform(data, form);
+        if (confirm) setConfirmation({ data });
+        else perform(data);
       }}
     >
       {children}
@@ -128,10 +139,10 @@ export function OperationForm({
             {confirmation.data.promote === true
               ? "Grant Finance Administrator access to this user? They will be able to review, approve, and manage Finance records, and will no longer be able to file requests."
               : command === "CLOSE_YEAR"
-              ? "Closing this fiscal year makes its records read-only. The system will check unresolved blockers before closing it."
-              : kind === "resolve"
-                ? "This resolution or override will be recorded in the audit trail. Confirm that the notes explain your decision."
-                : "This change will be recorded in the audit trail. Review your selections before continuing."}
+                ? "Closing this fiscal year makes its records read-only. The system will check unresolved blockers before closing it."
+                : kind === "resolve"
+                  ? "This resolution or override will be recorded in the audit trail. Confirm that the notes explain your decision."
+                  : "This change will be recorded in the audit trail. Review your selections before continuing."}
           </p>
           <div className="form-actions">
             <button
@@ -146,7 +157,7 @@ export function OperationForm({
               className={`button ${destructive ? "danger" : "primary"}`}
               type="button"
               disabled={pending}
-              onClick={() => perform(confirmation.data, confirmation.form)}
+              onClick={() => perform(confirmation.data)}
             >
               {pending ? "Saving…" : "Confirm Changes"}
             </button>

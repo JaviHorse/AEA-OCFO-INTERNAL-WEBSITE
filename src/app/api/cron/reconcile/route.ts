@@ -5,12 +5,12 @@ import { reconcileYear } from "@/lib/reconciliation";
 import { syncRequestRegister } from "@/lib/register-sync";
 export const maxDuration = 60;
 export async function GET(request: NextRequest) {
-  const expected = `Bearer ${process.env.CRON_SECRET ?? ""}`,
-    provided = request.headers.get("authorization") ?? "";
+  const expected = Buffer.from(`Bearer ${process.env.CRON_SECRET ?? ""}`),
+    provided = Buffer.from(request.headers.get("authorization") ?? "");
   if (
     !process.env.CRON_SECRET ||
     provided.length !== expected.length ||
-    !timingSafeEqual(Buffer.from(provided), Buffer.from(expected))
+    !timingSafeEqual(provided, expected)
   )
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { data: years, error } = await serviceClient()

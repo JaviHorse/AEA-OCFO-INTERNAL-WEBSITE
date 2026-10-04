@@ -8,6 +8,10 @@ import { resolve } from "node:path";
 import assert from "node:assert/strict";
 
 const fixturePath = resolve("tests/ui/fixtures.ts").replaceAll("\\", "/");
+const reportFixturePath = resolve("src/lib/request-reports.ts").replaceAll(
+  "\\",
+  "/",
+);
 const result = await build({
   entryPoints: ["tests/ui/entry.tsx"],
   bundle: true,
@@ -27,19 +31,26 @@ const result = await build({
         b.onResolve(
           {
             filter:
-              /^(next\/link|next\/navigation|server-only|@\/app\/(actions|register\/actions)|@\/lib\/(data|auth|registration|google-drive|page-data))$/,
+              /^(next\/link|next\/image|next\/navigation|server-only|\.\.\/actions|@\/app\/(actions|register\/actions)|@\/lib\/(data|auth|registration|google-drive|page-data))$/,
           },
           (args) => ({ path: args.path, namespace: "ux-fixture" }),
         );
         b.onLoad({ filter: /.*/, namespace: "ux-fixture" }, (args) => {
           if (args.path === "@/lib/page-data")
             return {
-              contents: `import {getFixture} from ${JSON.stringify(fixturePath)};export const pageNumber=v=>Math.max(1,Number(v)||1);export const getRequestListData=async(p)=>{const w=getFixture();const records=w.requests.filter(r=>["APPROVED","PROCESSING","COMPLETED","REJECTED","NEEDS_REVISION"].includes(r.status)&&(!p.status||(p.status==="APPROVED"?["APPROVED","PROCESSING","COMPLETED"].includes(r.status):r.status===p.status)));return {...w,requests:records,page:1,count:records.length,queue:"decisions"};};export const getDashboardData=async()=>{const w=getFixture();return {...w,revisions:w.requests.filter(r=>r.status==="NEEDS_REVISION"),pending:w.requests.filter(r=>["SUBMITTED","UNDER_OCFO_REVIEW","READY_FOR_CFO","APPROVED","PROCESSING"].includes(r.status)).length,submitted:w.requests.filter(r=>r.status==="SUBMITTED").length,ready:w.requests.filter(r=>r.status==="READY_FOR_CFO").length,revisionCount:w.requests.filter(r=>r.status==="NEEDS_REVISION").length};};`,
+              contents: `import {getFixture} from ${JSON.stringify(fixturePath)};import {requestTypeSummaries} from ${JSON.stringify(reportFixturePath)};export const getReportData=async()=>{const w=getFixture();return {...w,groups:requestTypeSummaries(w.requests,w.requestTypes)};};export const requestListColumns="*";export const pageNumber=v=>Math.max(1,Number(v)||1);export const getRequestListData=async(p,queue)=>{const w=getFixture();const actual=queue==="all"&&w.role!=="DEPARTMENT_MEMBER"?"inbox":queue;const records=w.requests.filter(r=>(actual==="all"|| (actual==="decisions"?["APPROVED","PROCESSING","COMPLETED","REJECTED","NEEDS_REVISION"]:["SUBMITTED","UNDER_OCFO_REVIEW","READY_FOR_CFO"]).includes(r.status))&&(!p.status||(p.status==="APPROVED"?["APPROVED","PROCESSING","COMPLETED"].includes(r.status):r.status===p.status)));return {...w,requests:records,page:1,count:records.length,queue:actual};};export const getDashboardData=async()=>{const w=getFixture();return {...w,totalRequested:[String(w.requests.filter(r=>!["DRAFT","CANCELLED"].includes(r.status)).reduce((s,r)=>s+Number(r.amount),0))],revisions:w.requests.filter(r=>r.status==="NEEDS_REVISION"),pending:w.requests.filter(r=>["SUBMITTED","UNDER_OCFO_REVIEW","READY_FOR_CFO","APPROVED","PROCESSING"].includes(r.status)).length,submitted:w.requests.filter(r=>r.status==="SUBMITTED").length,ready:w.requests.filter(r=>r.status==="READY_FOR_CFO").length,revisionCount:w.requests.filter(r=>r.status==="NEEDS_REVISION").length};};`,
               loader: "js",
               resolveDir: process.cwd(),
             };
           if (args.path === "server-only")
             return { contents: "export {};", loader: "js" };
+          if (args.path === "next/image")
+            return {
+              contents:
+                'import {createElement} from "react";export default function Image({unoptimized, ...props}){return createElement("img",props);}',
+              loader: "js",
+              resolveDir: process.cwd(),
+            };
           if (args.path === "next/link")
             return {
               contents:
@@ -69,7 +80,7 @@ const result = await build({
               loader: "js",
             };
           return {
-            contents: `window.__actions=[];async function action(command,data){window.__actions.push({command,data});return {ok:true,id:'saved-request'};}export const saveRequest=data=>action('SAVE_REQUEST',data);export async function validateDriveAction(url){if(url.includes('empty'))return {ok:false,message:'This folder is empty. Add your required documents, then check it again.'};if(url.includes('inaccessible'))return {ok:false,message:'We couldn’t access this Google Drive folder. Check the link and sharing settings.'};return {ok:true,data:{name:'Supporting documents',files:[{name:'Invoice.pdf'},{name:'PDAF.pdf'}]}};}export const requestAction=(command,data)=>action(command,data);export const adminAction=(command,data)=>action(command,data);export const recordTransaction=data=>action('TRANSACTION',data);export const resolveIssue=data=>action('RESOLVE',data);export const submitReport=data=>action('REPORT',data);export const saveGuide=data=>action('GUIDE',data);export const retryRegisterSync=id=>action('RETRY_REGISTER',{id});export const manageRegisteredUser=data=>action("MANAGE_USER",data);export const registerAccount=department=>action("REGISTER",{department});export const signOut=()=>{};export const verifyRecord=(kind,id)=>action('VERIFY',{kind,id});`,
+            contents: `window.__actions=[];async function action(command,data){window.__actions.push({command,data});return {ok:true,id:'saved-request'};}export const saveRequest=data=>action('SAVE_REQUEST',data);export async function validateDriveAction(url){if(url.includes('empty'))return {ok:false,message:'This folder is empty. Add your required documents, then check it again.'};if(url.includes('inaccessible'))return {ok:false,message:'We couldn’t access this Google Drive folder. Check the link and sharing settings.'};return {ok:true,data:{name:'Supporting documents',files:[{name:'Invoice.pdf'},{name:'PDAF.pdf'}]}};}export const requestAction=(command,data)=>action(command,data);export const adminAction=(command,data)=>action(command,data);export const recordTransaction=data=>action('TRANSACTION',data);export const setDepartmentBudget=data=>action('SET_BUDGET',data);export const resolveIssue=data=>action('RESOLVE',data);export const submitReport=data=>action('REPORT',data);export const saveGuide=data=>action('GUIDE',data);export const retryRegisterSync=id=>action('RETRY_REGISTER',{id});export const manageRegisteredUser=data=>action("MANAGE_USER",data);export const registerAccount=department=>action("REGISTER",{department});export const signOut=()=>{};export const verifyRecord=(kind,id)=>action('VERIFY',{kind,id});`,
             loader: "js",
           };
         });
@@ -77,11 +88,34 @@ const result = await build({
     },
   ],
 });
-const css = (await readFile("src/app/globals.css", "utf8")).replace(
-  '@import "tailwindcss";',
-  "",
-);
-const server = createServer((req, res) => {
+const css = (
+  (await readFile("src/app/globals.css", "utf8")) +
+  "\n" +
+  (await readFile("src/app/aea-theme.css", "utf8"))
+).replace('@import "tailwindcss";', "");
+const server = createServer(async (req, res) => {
+  if (/^\/(?:brand|fonts)\/[a-z0-9.-]+\.(?:png|woff2)$/.test(req.url ?? "")) {
+    try {
+      res.setHeader(
+        "Content-Type",
+        req.url.endsWith(".png") ? "image/png" : "font/woff2",
+      );
+      res.end(await readFile(`public${req.url}`));
+    } catch {
+      res.writeHead(404);
+      res.end();
+    }
+    return;
+  }
+  if (req.url.startsWith("/reports/export?")) {
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="finance-requests-2627.csv"',
+    );
+    res.end("Request type,Request\r\nReimbursement,Speaker reimbursement\r\n");
+    return;
+  }
   if (req.url === "/fixture.js") {
     res.setHeader("Content-Type", "application/javascript");
     res.end(result.outputFiles[0].contents);
@@ -100,7 +134,9 @@ const base = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({
   executablePath:
     process.env.UX_BROWSER_PATH ||
-    "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
+    (process.platform === "win32"
+      ? "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
+      : undefined),
   headless: true,
   args: ["--disable-gpu"],
 });
@@ -114,6 +150,7 @@ async function open(query) {
   const params = new URLSearchParams(query);
   const paths = {
     dashboard: "/dashboard",
+    "request-list": "/requests",
     wizard: "/requests/new",
     projects: "/projects",
     project: "/projects/project",
@@ -157,7 +194,10 @@ try {
   ])
     assert(!nav.includes(hidden));
   assert(nav.includes("Help & Requirements"));
-  assert((await page.locator("main").innerText()).includes("₱52,500.00"));
+  assert(!(await page.locator("main").innerText()).includes("₱52,500.00"));
+  assert(
+    (await page.locator("main").innerText()).includes("Total Amount Requested"),
+  );
   assert(!(await page.locator("main").innerText()).includes("CREA"));
   assert.equal(
     await page.getByRole("link", { name: "Fix Request", exact: true }).count(),
@@ -169,7 +209,7 @@ try {
   });
   await noOverflow();
   await record(
-    "A: applicant navigation, department budget, and actionable revision",
+    "A: applicant navigation, confidential budget replaced by request total, and actionable revision",
   );
 
   await open("page=wizard&role=DEPARTMENT_MEMBER");
@@ -385,7 +425,7 @@ try {
     "page=requests&role=OCFO_MEMBER&status=READY_FOR_CFO&filter=READY_FOR_CFO",
   );
   await page.getByRole("link", { name: "Review", exact: true }).waitFor();
-  assert.equal(await page.getByLabel("Status", { exact: true }).count(), 0);
+  assert.equal(await page.getByLabel("Status", { exact: true }).count(), 1);
   await record(
     "closed-year action suppression and Finance inbox without decision statuses",
   );
@@ -423,8 +463,14 @@ try {
       .allTextContents(),
     ["All statuses", "Approved", "Rejected", "Incomplete"],
   );
-  assert.deepEqual(await page.locator("form.table-filters [name]").evaluateAll(elements => elements.map(element => element.getAttribute("name"))),
-    ["year", "status", "department", "type", "project"]);
+  assert.deepEqual(
+    await page
+      .locator("form.table-filters [name]")
+      .evaluateAll((elements) =>
+        elements.map((element) => element.getAttribute("name")),
+      ),
+    ["year", "status", "department", "type", "project"],
+  );
   assert(!(await page.locator("main").innerText()).includes("Available After"));
   assert.equal(await page.locator("thead th").count(), 7);
   await page.screenshot({
@@ -445,13 +491,13 @@ try {
   await page
     .getByRole("heading", { name: "Create your AEA Finance account" })
     .waitFor();
-  assert.equal(await page.getByLabel("Department", { exact: true }).count(), 1);
+  assert.equal(await page.getByLabel(/^Department/).count(), 1);
   assert.equal(await page.locator('select[name="role"]').count(), 0);
   await page.screenshot({
     path: "artifacts/ux-review/registration.png",
     fullPage: true,
   });
-  await page.getByLabel("Department", { exact: true }).selectOption("acads");
+  await page.getByLabel(/^Department/).selectOption("acads");
   await page
     .getByRole("button", { name: "Create Account", exact: true })
     .click();
@@ -499,9 +545,9 @@ try {
       .count(),
     0,
   );
-  await page.getByRole("button", { name: "Download Compilation" }).waitFor();
+  await page.getByRole("link", { name: "Download Compilation" }).waitFor();
   const exportReady = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download Compilation" }).click();
+  await page.getByRole("link", { name: "Download Compilation" }).click();
   const compilation = await exportReady;
   await compilation.saveAs("artifacts/ux-review/request-compilation.csv");
   const exportedRequests = await readFile(
@@ -512,7 +558,7 @@ try {
   assert(exportedRequests.includes("Reimbursement"));
 
   assert.equal(await page.locator("main details").count(), 0);
-  assert.equal(await page.locator("main a[href^=\"#type-\"]").count(), 0);
+  assert.equal(await page.locator('main a[href^="#type-"]').count(), 0);
   await page.screenshot({
     path: "artifacts/ux-review/request-summaries.png",
     fullPage: true,
@@ -574,6 +620,7 @@ try {
   }
   for (const tab of [
     "members",
+    "finance",
     "departments",
     "projects",
     "requirements",
@@ -586,10 +633,78 @@ try {
       .getByRole("heading", { name: "Administration", exact: true })
       .waitFor();
     assert.equal(await page.getByRole("alert").count(), 0);
-    assert.equal(await page.locator("main > .admin-tabs a").count(), 6);
+    assert.equal(await page.locator("main > .admin-tabs a").count(), 7);
   }
   await record(
     "page audit: projects, project detail, departments, department detail, profile, and all Administration groups render",
+  );
+
+  await open("page=admin&role=CFO_ADMIN&tab=finance&status=APPROVED");
+  await page
+    .getByRole("heading", { name: "Record Expenses & Revenue" })
+    .waitFor();
+  await page
+    .locator("summary")
+    .filter({ hasText: "Academic Affairs" })
+    .first()
+    .click();
+  await page.getByLabel("New current budget (₱)").fill("120000.25");
+  await page
+    .getByLabel("Reason for adjustment")
+    .fill("Approved annual allocation");
+  await page
+    .getByRole("button", { name: "Update Budget", exact: true })
+    .click();
+  assert.equal((await page.evaluate(() => window.__actions)).length, 0);
+  await page
+    .getByRole("button", { name: "Confirm Changes", exact: true })
+    .click();
+  await page.waitForFunction(() =>
+    window.__actions.some((a) => a.command === "SET_BUDGET"),
+  );
+  const budgetWrite = (await page.evaluate(() => window.__actions))[0];
+  assert.equal(budgetWrite.data.amount, "120000.25");
+  assert.equal(budgetWrite.data.expected_budget, "100000.00");
+  await page
+    .locator(".panel")
+    .filter({
+      has: page.getByRole("heading", { name: "Record Expenses & Revenue" }),
+    })
+    .locator("summary")
+    .click();
+  await page.getByLabel("Actual amount (₱)").fill("1500.25");
+  await page.getByLabel("Transaction date").fill("2026-10-05");
+  await page
+    .getByLabel("Description", { exact: true })
+    .fill("Paid supplier invoice");
+  await page
+    .getByRole("button", { name: "Record Transaction", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Confirm Changes", exact: true })
+    .click();
+  await page.waitForFunction(() =>
+    window.__actions.some((a) => a.command === "TRANSACTION"),
+  );
+  const transactionWrite = (await page.evaluate(() => window.__actions)).find(
+    (a) => a.command === "TRANSACTION",
+  );
+  assert.equal(transactionWrite.data.amount, "1500.25");
+  assert.equal(transactionWrite.data.type, "EXPENSE");
+  assert.equal(transactionWrite.data.department_id, "acads");
+  await noOverflow();
+  await open("page=admin&role=CFO_ADMIN&tab=finance&closed=1&status=APPROVED");
+  await page
+    .getByRole("heading", { name: "Record Expenses & Revenue" })
+    .waitFor();
+  assert.equal(
+    await page
+      .getByRole("button", { name: /Update Budget|Record Transaction/ })
+      .count(),
+    0,
+  );
+  await record(
+    "Finance controls: confirmed budget adjustments, exact transaction amounts, and read-only closed years",
   );
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -621,6 +736,120 @@ try {
   await noOverflow();
   await record(
     "mobile dashboard, navigation, wizard, and timeline without viewport overflow",
+  );
+  for (const viewport of [
+    { width: 1440, height: 960 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    for (const [screen, role, status] of [
+      ["login", "DEPARTMENT_MEMBER", "SUBMITTED"],
+      ["register", "DEPARTMENT_MEMBER", "SUBMITTED"],
+      ["denied", "DEPARTMENT_MEMBER", "SUBMITTED"],
+      ["not-found", "DEPARTMENT_MEMBER", "SUBMITTED"],
+      ["error", "DEPARTMENT_MEMBER", "SUBMITTED"],
+      ["dashboard", "DEPARTMENT_MEMBER", "NEEDS_REVISION"],
+      ["dashboard", "CFO_ADMIN", "SUBMITTED"],
+      ["request-list", "CFO_ADMIN", "SUBMITTED"],
+      ["approvals", "CFO_ADMIN", "APPROVED"],
+      ["reports", "CFO_ADMIN", "APPROVED"],
+      ["guide", "DEPARTMENT_MEMBER", "SUBMITTED"],
+      ["profile", "DEPARTMENT_MEMBER", "SUBMITTED"],
+      ["new", "DEPARTMENT_MEMBER", "SUBMITTED"],
+      ["detail", "CFO_ADMIN", "SUBMITTED"],
+      ["detail", "DEPARTMENT_MEMBER", "SUBMITTED"],
+      ["projects", "CFO_ADMIN", "SUBMITTED"],
+      ["project", "CFO_ADMIN", "SUBMITTED"],
+      ["departments", "CFO_ADMIN", "SUBMITTED"],
+      ["department", "CFO_ADMIN", "SUBMITTED"],
+      ["admin", "CFO_ADMIN", "SUBMITTED"],
+    ]) {
+      await open(`page=${screen}&role=${role}&status=${status}`);
+      await page.locator("h1").first().waitFor();
+      await page.evaluate(() => document.fonts.ready);
+      await page.evaluate(() =>
+        Promise.all([
+          document.fonts.load('16px "Lato"'),
+          document.fonts.load('32px "League Gothic"'),
+        ]),
+      );
+      await noOverflow();
+      assert(
+        await page.evaluate(
+          () =>
+            document.fonts.check('16px "Lato"') &&
+            document.fonts.check('32px "League Gothic"'),
+        ),
+        "brand fonts must load",
+      );
+      const logo = page.locator('img[src="/brand/aea-logo.png"]').first();
+      await logo.waitFor({ state: "attached" });
+      await page.waitForFunction(() =>
+        [...document.querySelectorAll('img[src="/brand/aea-logo.png"]')].every(
+          (image) => image.complete && image.naturalWidth > 0,
+        ),
+      );
+      await page.locator(".aea-mascots img").evaluateAll((images) =>
+        images.forEach((image) => {
+          image.loading = "eager";
+        }),
+      );
+      await page.waitForFunction(() =>
+        [...document.querySelectorAll(".aea-mascots img")].every(
+          (image) => image.complete && image.naturalWidth > 0,
+        ),
+      );
+      await page
+        .locator(".aea-mascots img")
+        .evaluateAll((images) =>
+          Promise.all(images.map((image) => image.decode())),
+        );
+      await page.screenshot({
+        path: `artifacts/ux-review/aea-${screen}-${role}-${viewport.width}.png`,
+        fullPage: true,
+      });
+      if (await page.locator("details").count()) {
+        if (screen === "detail" && role === "CFO_ADMIN")
+          await page
+            .getByRole("tab", { name: "More Details", exact: true })
+            .click();
+        await page.locator("details").evaluateAll((sections) => {
+          for (const section of sections) section.open = true;
+        });
+        await noOverflow();
+        const crowded = await page
+          .locator("details[open]")
+          .evaluateAll((sections) =>
+            sections.flatMap((section) => {
+              const bounds = section.getBoundingClientRect();
+              if (!bounds.width || !bounds.height) return [];
+              const inset = parseFloat(getComputedStyle(section).paddingLeft);
+              return Array.from(section.children)
+                .filter((child) => child.tagName !== "SUMMARY")
+                .flatMap((child) => {
+                  const content = child.getBoundingClientRect();
+                  if (!content.width || !content.height) return [];
+                  return content.left < bounds.left + inset - 1 ||
+                    content.right > bounds.right - inset + 1
+                    ? [section.querySelector("summary")?.textContent]
+                    : [];
+                });
+            }),
+          );
+        assert.deepEqual(
+          crowded,
+          [],
+          `expanded contents must be inset: ${screen} at ${viewport.width}px`,
+        );
+        await page.screenshot({
+          path: `artifacts/ux-review/aea-expanded-${screen}-${role}-${viewport.width}.png`,
+          fullPage: true,
+        });
+      }
+    }
+  }
+  await record(
+    "AEA desktop/mobile visual audit: branded assets, local fonts, account/system screens and all workspace pages without overflow",
   );
   assert.deepEqual(errors, []);
   await writeFile(

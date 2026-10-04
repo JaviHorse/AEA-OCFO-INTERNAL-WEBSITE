@@ -1,3 +1,4 @@
+import { AeaLogo, MascotPair } from "@/components/aea-brand";
 import Link from "next/link";
 import { registrationContext } from "@/lib/registration";
 import { RegistrationForm } from "@/components/registration-form";
@@ -16,8 +17,12 @@ export default async function Register() {
   return (
     <main className="account-page">
       <section className="account-card">
-        <Link className="text-link" href="/login">
-          AEA Finance
+        <Link
+          className="portal-logo"
+          href="/login"
+          aria-label="AEA Finance sign in"
+        >
+          <AeaLogo />
         </Link>
         <h1>Create your AEA Finance account</h1>
         <dl className="detail-list">
@@ -54,6 +59,7 @@ export default async function Register() {
             Sign out / use another account
           </button>
         </form>
+        <MascotPair className="account-mascots" />
       </section>
     </main>
   );

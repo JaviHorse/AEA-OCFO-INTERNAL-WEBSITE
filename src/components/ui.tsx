@@ -1,3 +1,4 @@
+import { MascotPair } from "./aea-brand";
 import Link from "next/link";
 import { ArrowUpRight, Inbox } from "lucide-react";
 import { human } from "@/lib/finance";
@@ -25,7 +26,10 @@ export function PageHeader({
         <h1>{title}</h1>
         {description && <p>{description}</p>}
       </div>
-      {action}
+      <div className="page-heading-aside">
+        {action}
+        <MascotPair className="heading-mascots" />
+      </div>
     </div>
   );
 }

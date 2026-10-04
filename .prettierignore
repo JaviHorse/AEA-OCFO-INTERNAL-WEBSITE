@@ -1,0 +1,8 @@
+node_modules/
+.next/
+artifacts/
+.tools/
+.diagnostics/
+scripts/diagnostics/
+*.sql
+next-env.d.ts

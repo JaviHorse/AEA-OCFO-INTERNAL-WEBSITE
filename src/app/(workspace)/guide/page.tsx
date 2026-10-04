@@ -3,7 +3,7 @@ import { workspace } from "@/lib/data";
 import { isFinance, human, money } from "@/lib/finance";
 import { requestDescriptions, requestTypeLabel } from "@/lib/ux";
 import { statuses } from "@/lib/types";
-import { PageHeader, Panel, Field } from "@/components/ui";
+import { PageHeader, Field } from "@/components/ui";
 import { OperationForm } from "@/components/operation-form";
 export default async function Guide({
   searchParams,
@@ -141,8 +141,8 @@ export default async function Guide({
               than shortcuts.
             </li>
             <li>
-              Share that folder with Finance reviewers and the integration email shown in
-              your request.
+              Share that folder with Finance reviewers and the integration email
+              shown in your request.
             </li>
             <li>Paste the folder link and choose Check Folder.</li>
             <li>
@@ -151,7 +151,9 @@ export default async function Guide({
             </li>
           </ol>
           <p>
-            Finance opens your submitted folder from the request register to check requirements. Keep it shared and keep payment and bank details inside your supporting documents.
+            Finance opens your submitted folder from the request register to
+            check requirements. Keep it shared and keep payment and bank details
+            inside your supporting documents.
           </p>
         </div>
       </details>
@@ -174,9 +176,10 @@ export default async function Guide({
           <details>
             <summary>How much money can my department still use?</summary>
             <p>
-              Available funds equal your current budget, minus recorded expenses
-              and funds reserved for approved requests. Revenue is tracked
-              separately.
+              Contact OCFO to confirm funding before committing to an expense.
+              Department budget balances are confidential. Your dashboard shows
+              the total amount requested, which does not represent available
+              funds.
             </p>
           </details>
           <details>

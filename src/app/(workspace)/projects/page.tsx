@@ -1,17 +1,20 @@
 import Link from "next/link";
 import { workspace } from "@/lib/data";
 import { PageHeader, Panel, Badge, Empty } from "@/components/ui";
+import { pageNumber } from "@/lib/page-data";
+import { HistoryPagination } from "@/components/history-pagination";
 export default async function Projects({
   searchParams,
 }: {
-  searchParams: Promise<{ year?: string }>;
+  searchParams: Promise<{ year?: string; page?: string }>;
 }) {
   const p = await searchParams;
-  const w = await workspace(p.year, [
-    "departments",
-    "projects",
-    "projectDepartments",
-  ]);
+  const page = pageNumber(p.page);
+  const w = await workspace(
+    p.year,
+    ["departments", "projects", "projectDepartments"],
+    { page },
+  );
   return (
     <>
       <PageHeader
@@ -28,6 +31,12 @@ export default async function Projects({
             </Link>
           ) : undefined
         }
+      />
+      <HistoryPagination
+        href="/projects"
+        year={w.year.id}
+        page={page}
+        count={w.historyCount}
       />
       {w.projects.length ? (
         <div className="department-grid">

@@ -1,6 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { assertCanFile, isAdmin, isRegisteredUser, productRole } from "../src/lib/permissions";
+import {
+  assertCanFile,
+  isAdmin,
+  isRegisteredUser,
+  productRole,
+} from "../src/lib/permissions";
 test("the two portal experiences do not grant legacy accounts additional privileges", () => {
   assert.equal(productRole("CFO_ADMIN"), "ADMIN");
   assert.equal(productRole("OCFO_MEMBER"), "ADMIN");

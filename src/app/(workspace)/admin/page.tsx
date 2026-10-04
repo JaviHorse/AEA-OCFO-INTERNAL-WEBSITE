@@ -10,10 +10,11 @@ const settingLabels: Record<string, string> = {
   allow_unlinked_transactions: "Allow transactions without a linked request",
 };
 import Link from "next/link";
-import { pageNumber } from "@/lib/page-data";
+import { pageNumber, requestListColumns } from "@/lib/page-data";
+import type { FinanceRequest } from "@/lib/types";
 import { ServerFilterForm } from "@/components/server-filter-form";
 import { redirect } from "next/navigation";
-import { human } from "@/lib/finance";
+import { human, money } from "@/lib/finance";
 import { requestTypeLabel } from "@/lib/ux";
 import { workspace, type Dataset } from "@/lib/data";
 import { PageHeader, Panel, Field, Badge } from "@/components/ui";
@@ -38,6 +39,7 @@ export default async function Admin({
   const offset = (page - 1) * 50;
   const tabDatasets: Record<string, Dataset[]> = {
     years: ["years"],
+    finance: ["departments", "financials", "requestTypes"],
     members: ["years", "departments"],
     departments: ["departments"],
     projects: ["years", "departments", "projects", "projectDepartments"],
@@ -100,6 +102,24 @@ export default async function Admin({
       : empty,
     tab === "audit" ? auditQuery.range(offset, offset + 49) : empty,
     tab === "projects" ? w.db.from("users").select("*") : empty,
+    tab === "finance"
+      ? w.db
+          .from("requests")
+          .select(requestListColumns, { count: "exact" })
+          .eq("fiscal_year_id", w.year.id)
+          .in("status", ["APPROVED", "PROCESSING"])
+          .in(
+            "request_type_id",
+            w.requestTypes
+              .filter(
+                (t) => t.creates_commitment || t.code === "PROJECT_END_REVENUE",
+              )
+              .map((t) => t.id),
+          )
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(offset, offset + 49)
+      : empty,
   ]);
   for (const r of results)
     if (r.error) throw new Error("Admin records could not be loaded.");
@@ -117,7 +137,16 @@ export default async function Admin({
     throw new Error("Registered users could not be loaded.");
   const users = tab === "members" ? (memberUsers.data ?? []) : projectUsers;
   const total =
-    results[tab === "members" ? 0 : tab === "notifications" ? 2 : 3];
+    results[
+      tab === "finance"
+        ? 5
+        : tab === "members"
+          ? 0
+          : tab === "notifications"
+            ? 2
+            : 3
+    ];
+  const financeRequests = (results[5].data ?? []) as FinanceRequest[];
   const count = "count" in total ? Number(total.count ?? 0) : 0;
   const values = Object.fromEntries(settings.map((s) => [s.key, s.value]));
   const departments = (
@@ -171,7 +200,7 @@ export default async function Admin({
           )}
         </ServerFilterForm>
       )}
-      {["members", "audit", "notifications"].includes(tab) && (
+      {["members", "audit", "notifications", "finance"].includes(tab) && (
         <nav className="pagination" aria-label="Admin pages">
           <span>
             {count} records - Page {page} of{" "}
@@ -194,6 +223,7 @@ export default async function Admin({
         {[
           ["members", "Members", ["members"]],
           ["years", "Fiscal Years", ["years"]],
+          ["finance", "Finance", ["finance"]],
           ["departments", "Departments", ["departments", "projects"]],
           ["types", "Request Setup", ["types", "requirements", "workflow"]],
           ["settings", "Settings", ["settings"]],
@@ -208,6 +238,156 @@ export default async function Admin({
           </Link>
         ))}
       </div>
+      {tab === "finance" && (
+        <>
+          <Panel title={`Department Budgets · ${w.year.label}`}>
+            <p>
+              Set each department’s current allocation here. Every change is
+              recorded as an approved budget adjustment with your explanation.
+              Existing spending and commitments remain intact. Department budget
+              requests and changes can also be updated through the normal
+              approval process.
+            </p>
+            {w.financials.map((f) => (
+              <details className="help-disclosure" key={f.department_id}>
+                <summary>
+                  {w.departments.find((d) => d.id === f.department_id)?.name} ·{" "}
+                  {money(f.current_budget)}
+                </summary>
+                <div className="disclosure-body">
+                  <p>
+                    Spent {money(f.actual_expenses)} · Committed{" "}
+                    {money(f.active_commitments)} · Available{" "}
+                    {money(f.available_funds)} · Revenue{" "}
+                    {money(f.actual_revenue)}
+                  </p>
+                  {!w.readOnly && (
+                    <OperationForm
+                      kind="budget"
+                      label="Update Budget"
+                      confirm
+                      defaults={{
+                        fiscal_year_id: w.year.id,
+                        department_id: f.department_id,
+                        expected_budget: String(f.current_budget),
+                        idempotency_key: crypto.randomUUID(),
+                      }}
+                    >
+                      <Field label="New current budget (₱)">
+                        <input
+                          name="amount"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          defaultValue={f.current_budget}
+                          required
+                        />
+                      </Field>
+                      <Field label="Reason for adjustment">
+                        <textarea
+                          name="reason"
+                          minLength={3}
+                          maxLength={1000}
+                          required
+                        />
+                      </Field>
+                    </OperationForm>
+                  )}
+                </div>
+              </details>
+            ))}
+          </Panel>
+          <Panel title="Record Expenses & Revenue">
+            <p>
+              Spent and Revenue are calculated from transactions. Record the
+              actual payment or receipt here; the financial summary updates
+              automatically. Choose an approved or processing request.
+              Transactions must match its department, project, and request type.
+            </p>
+            {!w.readOnly && financeRequests.length === 0 && (
+              <p>
+                No approved or processing requests are ready for transaction
+                recording.
+              </p>
+            )}
+            {!w.readOnly ? (
+              financeRequests.map((r) => {
+                const t = w.requestTypes.find(
+                  (t) => t.id === r.request_type_id,
+                )!;
+                return (
+                  <details className="help-disclosure" key={r.id}>
+                    <summary>
+                      {r.reference_code ?? r.title} · {money(r.amount)}
+                    </summary>
+                    <div className="disclosure-body">
+                      <p>
+                        {r.title} ·{" "}
+                        {
+                          w.departments.find((d) => d.id === r.department_id)
+                            ?.name
+                        }{" "}
+                        ·{" "}
+                        {t.code === "PROJECT_END_REVENUE"
+                          ? "Revenue"
+                          : "Expense"}
+                      </p>
+                      <OperationForm
+                        kind="transaction"
+                        label="Record Transaction"
+                        confirm
+                        defaults={{
+                          fiscal_year_id: w.year.id,
+                          department_id: r.department_id,
+                          request_id: r.id,
+                          project_id: r.project_id ?? "",
+                          type:
+                            t.code === "PROJECT_END_REVENUE"
+                              ? "REVENUE"
+                              : "EXPENSE",
+                          idempotency_key: crypto.randomUUID(),
+                        }}
+                      >
+                        <Field label="Actual amount (₱)">
+                          <input
+                            name="amount"
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            required
+                          />
+                        </Field>
+                        <Field label="Transaction date">
+                          <input
+                            name="transaction_date"
+                            type="date"
+                            min={w.year.start_date}
+                            max={w.year.end_date}
+                            required
+                          />
+                        </Field>
+                        <Field label="Description">
+                          <textarea
+                            name="description"
+                            minLength={3}
+                            maxLength={1000}
+                            required
+                          />
+                        </Field>
+                      </OperationForm>
+                    </div>
+                  </details>
+                );
+              })
+            ) : (
+              <p>This fiscal year is closed and read-only.</p>
+            )}
+            <Link className="text-link" href={`/approvals?year=${w.year.id}`}>
+              Review requests →
+            </Link>
+          </Panel>
+        </>
+      )}
       {(["departments", "projects"].includes(tab) ||
         ["types", "requirements", "workflow"].includes(tab) ||
         ["notifications", "audit"].includes(tab)) && (
