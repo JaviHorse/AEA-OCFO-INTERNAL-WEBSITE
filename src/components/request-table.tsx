@@ -11,7 +11,12 @@ import type {
 import { money, human } from "@/lib/finance";
 import { requestTypeLabel } from "@/lib/ux";
 import { Badge, Empty } from "./ui";
-import { decisionStatuses, requestDecision, decisionLabel, isRequestInbox } from "@/lib/request-decisions";
+import {
+  decisionStatuses,
+  requestDecision,
+  decisionLabel,
+  isRequestInbox,
+} from "@/lib/request-decisions";
 export function RequestTable({
   requests,
   departments,
@@ -27,6 +32,7 @@ export function RequestTable({
   people = [],
   reviews = [],
   queue = "all",
+  filteredEmpty = false,
 }: {
   requests: FinanceRequest[];
   departments: Department[];
@@ -42,6 +48,7 @@ export function RequestTable({
   people?: { id: string; full_name: string | null; email: string }[];
   reviews?: { request_id: string; review_status: string }[];
   queue?: "all" | "inbox" | "decisions";
+  filteredEmpty?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState(initialStatus);
@@ -77,7 +84,9 @@ export function RequestTable({
                 ? ["SUBMITTED", "UNDER_OCFO_REVIEW", "READY_FOR_CFO"]
                 : ["DRAFT", "NEEDS_REVISION"]
               ).includes(r.status)
-            : (queue === "inbox" || status === "DRAFT" ? r.status : requestDecision(r.status)) === status)) &&
+            : (queue === "inbox" || status === "DRAFT"
+                ? r.status
+                : requestDecision(r.status)) === status)) &&
       (!department || r.department_id === department) &&
       (!type ||
         r.request_type_id === type ||
@@ -137,24 +146,30 @@ export function RequestTable({
                 onChange={(e) => changed(() => setQuery(e.target.value))}
               />
             </label>
-            {queue !== "inbox" && <label>
-              Status
-              <select
-                aria-label="Status"
-                value={status}
-                onChange={(e) => changed(() => setStatus(e.target.value))}
-              >
-                <option value="">All statuses</option>
-                {queue === "all" && <option value="action">Needs Action</option>}
-                {queue === "all" && !finance && <option value="pending">Pending</option>}
-                {queue === "all" && <option value="DRAFT">Drafts</option>}
-                {decisionStatuses.map((s) => (
-                  <option key={s} value={s}>
-                    {decisionLabel(s)}
-                  </option>
-                ))}
-              </select>
-            </label>}
+            {queue !== "inbox" && (
+              <label>
+                Status
+                <select
+                  aria-label="Status"
+                  value={status}
+                  onChange={(e) => changed(() => setStatus(e.target.value))}
+                >
+                  <option value="">All statuses</option>
+                  {queue === "all" && (
+                    <option value="action">Needs Action</option>
+                  )}
+                  {queue === "all" && !finance && (
+                    <option value="pending">Pending</option>
+                  )}
+                  {queue === "all" && <option value="DRAFT">Drafts</option>}
+                  {decisionStatuses.map((s) => (
+                    <option key={s} value={s}>
+                      {decisionLabel(s)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             {finance && (
               <label>
                 Department
@@ -333,9 +348,21 @@ export function RequestTable({
                           : r.title}
                       </td>
                       <td className="money-cell">{money(r.amount)}</td>
-                      {queue !== "inbox" && <td>
-                        {requestDecision(r.status) ? <Badge value={requestDecision(r.status)!} /> : <span className="muted">{r.status === "DRAFT" ? "Draft" : r.status === "CANCELLED" ? "Cancelled" : "Awaiting decision"}</span>}
-                      </td>}
+                      {queue !== "inbox" && (
+                        <td>
+                          {requestDecision(r.status) ? (
+                            <Badge value={requestDecision(r.status)!} />
+                          ) : (
+                            <span className="muted">
+                              {r.status === "DRAFT"
+                                ? "Draft"
+                                : r.status === "CANCELLED"
+                                  ? "Cancelled"
+                                  : "Awaiting decision"}
+                            </span>
+                          )}
+                        </td>
+                      )}
                       <td>
                         {date(
                           finance
@@ -379,9 +406,13 @@ export function RequestTable({
       ) : (
         <Empty
           title={
-            queue === "decisions" && !requests.length ? "No decisions yet." : requests.length
+            filteredEmpty
               ? "No matching requests"
-              : "No finance requests yet."
+              : queue === "decisions" && !requests.length
+                ? "No decisions yet."
+                : requests.length
+                  ? "No matching requests"
+                  : "No finance requests yet."
           }
           description={
             requests.length

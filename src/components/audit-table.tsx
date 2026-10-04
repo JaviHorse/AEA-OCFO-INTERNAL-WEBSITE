@@ -2,8 +2,10 @@
 import { useState } from "react";
 export function AuditTable({
   records,
+  filters = true,
 }: {
   records: Record<string, unknown>[];
+  filters?: boolean;
 }) {
   const [actor, setActor] = useState("");
   const [entity, setEntity] = useState("");
@@ -18,32 +20,34 @@ export function AuditTable({
   );
   return (
     <>
-      <div className="table-filters">
-        <input
-          aria-label="Actor"
-          placeholder="Actor ID"
-          value={actor}
-          onChange={(e) => setActor(e.target.value)}
-        />
-        <input
-          aria-label="Entity"
-          placeholder="Entity"
-          value={entity}
-          onChange={(e) => setEntity(e.target.value)}
-        />
-        <input
-          aria-label="Action"
-          placeholder="Action"
-          value={action}
-          onChange={(e) => setAction(e.target.value)}
-        />
-        <input
-          aria-label="Audit date"
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-        />
-      </div>
+      {filters && (
+        <div className="table-filters">
+          <input
+            aria-label="Actor"
+            placeholder="Actor ID"
+            value={actor}
+            onChange={(e) => setActor(e.target.value)}
+          />
+          <input
+            aria-label="Entity"
+            placeholder="Entity"
+            value={entity}
+            onChange={(e) => setEntity(e.target.value)}
+          />
+          <input
+            aria-label="Action"
+            placeholder="Action"
+            value={action}
+            onChange={(e) => setAction(e.target.value)}
+          />
+          <input
+            aria-label="Audit date"
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+          />
+        </div>
+      )}
       <div className="table-wrap">
         <table>
           <thead>

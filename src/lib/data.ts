@@ -1,4 +1,5 @@
 import "server-only";
+import { withTiming } from "./performance";
 import { cache } from "react";
 import { yearContext } from "./auth";
 import { isFinance } from "./finance";
@@ -56,7 +57,7 @@ export const referenceData = cache(
     return await query;
   },
 );
-export async function workspace(
+async function loadWorkspace(
   yearId?: string,
   datasets?: Dataset[],
   filter: {
@@ -163,5 +164,8 @@ export async function workspace(
       department_id: string;
     }[],
   };
+}
+export function workspace(...args: Parameters<typeof loadWorkspace>) {
+  return withTiming("workspace.total", () => loadWorkspace(...args));
 }
 export type Workspace = Awaited<ReturnType<typeof workspace>>;

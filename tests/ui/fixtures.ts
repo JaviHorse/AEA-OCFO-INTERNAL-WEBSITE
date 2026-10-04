@@ -181,7 +181,14 @@ export function getFixture() {
             is_verified: true,
           },
         ],
-    request_register_sync: [{ request_id: "request", version: 1, synced_version: 1, last_error: null }],
+    request_register_sync: [
+      {
+        request_id: "request",
+        version: 1,
+        synced_version: 1,
+        last_error: null,
+      },
+    ],
     commitments: [],
     approvals: [],
     notifications: [],
@@ -216,6 +223,10 @@ export function getFixture() {
           return query;
         },
         order() {
+          return query;
+        },
+        range(from: number, to: number) {
+          rows = rows.slice(from, to + 1);
           return query;
         },
         limit(n: number) {

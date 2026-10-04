@@ -1,4 +1,5 @@
 import "server-only";
+import { withTiming } from "./performance";
 import { serviceClient } from "./supabase/server";
 import { cents } from "./finance";
 import { notifyEvent } from "./email";
@@ -13,7 +14,7 @@ type Candidate = {
   entity_id: string;
   description: string;
 };
-export async function reconcileYear(yearId: string) {
+async function runReconciliation(yearId: string) {
   const db = serviceClient();
   const results = await Promise.all([
     db.from("department_financials").select("*").eq("fiscal_year_id", yearId),
@@ -283,4 +284,8 @@ export async function reconcileYear(yearId: string) {
     }
   }
   return { checked: requests.length, issues: candidates.length };
+}
+
+export function reconcileYear(yearId: string) {
+  return withTiming("reconciliation.total", () => runReconciliation(yearId));
 }

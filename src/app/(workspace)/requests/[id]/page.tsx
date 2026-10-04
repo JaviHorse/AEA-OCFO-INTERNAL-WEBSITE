@@ -64,51 +64,6 @@ export default async function RequestDetail({
   const department = w.departments.find((d) => d.id === r.department_id);
   const project = w.projects.find((pr) => pr.id === r.project_id);
   const f = w.financials.find((row) => row.department_id === r.department_id);
-  const tables = finance
-    ? [
-        "request_comments",
-        "request_status_history",
-        "request_reviews",
-        "request_document_checks",
-        "commitments",
-        "approvals",
-        "notifications",
-      ]
-    : [
-        "request_comments",
-        "request_status_history",
-        "request_document_checks",
-      ];
-  const results = await Promise.all(
-    tables.map((table) => w.db.from(table).select("*").eq("request_id", id)),
-  );
-  if (results.some((result) => result.error))
-    throw new Error("Request supporting records could not be loaded.");
-  const records = Object.fromEntries(
-    tables.map((table, i) => [table, results[i].data ?? []]),
-  );
-  const comments = records.request_comments,
-    history = records.request_status_history,
-    reviews = records.request_reviews ?? [],
-    checks = records.request_document_checks;
-  const commitments = records.commitments ?? [],
-    approvals = records.approvals ?? [],
-    notifications = records.notifications ?? [];
-  const personIds = [
-    ...new Set([
-      r.requester_user_id,
-      ...comments.map((c) => c.author_user_id),
-      ...reviews.map((rv) => rv.reviewer_user_id),
-    ]),
-  ];
-  const { data: people } = await w.db
-    .from("users")
-    .select("id,full_name,email")
-    .in("id", personIds);
-  const nameOf = (userId: string) =>
-    people?.find((person) => person.id === userId)?.full_name ??
-    people?.find((person) => person.id === userId)?.email ??
-    "Finance / department team";
   const canEdit =
     !isFinance(w.role) &&
     role === "DEPARTMENT_MEMBER" &&
@@ -143,9 +98,55 @@ export default async function RequestDetail({
       </>
     );
   }
-  const { data: registerState, error: registerError } = finance && r.reference_code
-    ? await w.db.from("request_register_sync").select("version,synced_version,last_error").eq("request_id", id).maybeSingle()
-    : { data: null, error: null };
+  const tables = finance
+    ? [
+        "request_comments",
+        "request_status_history",
+        "request_reviews",
+        "request_document_checks",
+        "commitments",
+        "approvals",
+        "notifications",
+      ]
+    : ["request_comments", "request_status_history", "request_document_checks"];
+  const results = await Promise.all(
+    tables.map((table) => w.db.from(table).select("*").eq("request_id", id)),
+  );
+  if (results.some((result) => result.error))
+    throw new Error("Request supporting records could not be loaded.");
+  const records = Object.fromEntries(
+    tables.map((table, i) => [table, results[i].data ?? []]),
+  );
+  const comments = records.request_comments,
+    history = records.request_status_history,
+    reviews = records.request_reviews ?? [],
+    checks = records.request_document_checks;
+  const commitments = records.commitments ?? [],
+    approvals = records.approvals ?? [],
+    notifications = records.notifications ?? [];
+  const personIds = [
+    ...new Set([
+      r.requester_user_id,
+      ...comments.map((c) => c.author_user_id),
+      ...reviews.map((rv) => rv.reviewer_user_id),
+    ]),
+  ];
+  const { data: people } = await w.db
+    .from("users")
+    .select("id,full_name,email")
+    .in("id", personIds);
+  const nameOf = (userId: string) =>
+    people?.find((person) => person.id === userId)?.full_name ??
+    people?.find((person) => person.id === userId)?.email ??
+    "Finance / department team";
+  const { data: registerState, error: registerError } =
+    finance && r.reference_code
+      ? await w.db
+          .from("request_register_sync")
+          .select("version,synced_version,last_error")
+          .eq("request_id", id)
+          .maybeSingle()
+      : { data: null, error: null };
   const checklist = requiredDocuments(
     w.requirements.filter((q) => q.request_type_id === r.request_type_id),
     String(r.amount),
@@ -220,10 +221,30 @@ export default async function RequestDetail({
   const docs = (
     <Panel title="Documents">
       <div className="drive-links">
-        {r.source_folder_url && <a className="button secondary" href={r.source_folder_url} target="_blank" rel="noreferrer">Open Submitted Requirements</a>}
-        {finance && <a className="text-link" href={registerUrl()} target="_blank" rel="noreferrer">Open Finance Register</a>}
+        {r.source_folder_url && (
+          <a
+            className="button secondary"
+            href={r.source_folder_url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open Submitted Requirements
+          </a>
+        )}
+        {finance && (
+          <a
+            className="text-link"
+            href={registerUrl()}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open Finance Register
+          </a>
+        )}
       </div>
-      <p>{verified} / {checklist.length} documents verified by Finance.</p>
+      <p>
+        {verified} / {checklist.length} documents verified by Finance.
+      </p>
       <div className="document-list">
         {checklist.map((req) => (
           <DocumentCheck
@@ -458,7 +479,17 @@ export default async function RequestDetail({
         description={`${department?.code ?? "Your department"} · ${requestTypeLabel(type)}`}
         action={
           <div className="action-buttons">
-            {requestDecision(r.status) ? <Badge value={requestDecision(r.status)!} /> : <span className="muted">{r.status === "DRAFT" ? "Draft" : r.status === "CANCELLED" ? "Cancelled" : "Awaiting decision"}</span>}
+            {requestDecision(r.status) ? (
+              <Badge value={requestDecision(r.status)!} />
+            ) : (
+              <span className="muted">
+                {r.status === "DRAFT"
+                  ? "Draft"
+                  : r.status === "CANCELLED"
+                    ? "Cancelled"
+                    : "Awaiting decision"}
+              </span>
+            )}
             {canEdit && (
               <Link className="button primary" href={`/requests/${id}?edit=1`}>
                 {r.status === "NEEDS_REVISION" ? "Fix Request" : "Finish Draft"}
@@ -468,7 +499,24 @@ export default async function RequestDetail({
         }
       />
       <RequestStatusTimeline status={r.status} />
-      {finance && r.reference_code && (registerError || !registerState || registerState.version > registerState.synced_version) && <div className="alert"><div><strong>Sheets recording pending</strong><p>{registerState?.last_error || (registerError ? "Apply migration 005 to enable the request register." : "The request is saved; its register row is waiting to update.")}</p>{!w.readOnly && <RegisterSyncRetry id={id} />}</div></div>}
+      {finance &&
+        r.reference_code &&
+        (registerError ||
+          !registerState ||
+          registerState.version > registerState.synced_version) && (
+          <div className="alert">
+            <div>
+              <strong>Sheets recording pending</strong>
+              <p>
+                {registerState?.last_error ||
+                  (registerError
+                    ? "Apply migration 005 to enable the request register."
+                    : "The request is saved; its register row is waiting to update.")}
+              </p>
+              {!w.readOnly && <RegisterSyncRetry id={id} />}
+            </div>
+          </div>
+        )}
 
       {r.status !== "NEEDS_REVISION" && (
         <p className="next-step">{nextStep(r.status, finance)}</p>
