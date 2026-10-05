@@ -14,28 +14,38 @@ export default async function Login({
         className="aea-welcome"
         aria-label="Welcome to the Ateneo Economics Association"
       >
-        <div className="welcome-brand">
-          <AeaLogo />
-          <span>ATENEO ECONOMICS ASSOCIATION</span>
+        <div className="welcome-office">
+          <MascotPair className="office-mascots" />
+          <div>
+            <span className="office-label">Office of the</span>
+            <strong>Chief Financial Officer</strong>
+            <span className="office-association">
+              Ateneo Economics Association
+            </span>
+          </div>
         </div>
         <div className="welcome-message">
-          <span className="welcome-kicker">
-            A little brighter. A lot more AEA.
-          </span>
           <h2>
-            Big ideas.
+            Maximizing
             <br />
-            <em>Bright futures.</em>
+            <em>Finances</em>
+            <br />
+            <span className="welcome-with">
+              with <span>AEA.</span>
+            </span>
           </h2>
-          <p>
-            Your ideas move AEA forward.
-            <br />
-            Let&apos;s keep the finances moving, too.
-          </p>
+          <p>Every request. Every decision. Moving AEA forward.</p>
         </div>
         <div className="welcome-bottom">
-          <span>Made for our community.</span>
-          <MascotPair />
+          <span className="welcome-signature">
+            Built for our community.<span>Driven by accountability.</span>
+          </span>
+          <div className="welcome-growth" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+            <span>↗</span>
+          </div>
         </div>
       </aside>
       <section className="account-card">

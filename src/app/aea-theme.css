@@ -1073,14 +1073,16 @@ details > form,
   max-width: 520px;
 }
 .aea-welcome {
-  background: var(--aea-blue);
-  border-radius: 24px;
-  color: var(--ink);
-  padding: 38px;
+  background:
+    radial-gradient(ellipse at 85% 15%, #659bff 0%, transparent 48%),
+    linear-gradient(145deg, #377ce0, #2462c0);
+  border-radius: 28px;
+  color: #fff8e4;
+  padding: clamp(28px, 3.2vw, 56px);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 650px;
+  min-height: 680px;
   overflow: hidden;
   position: relative;
   isolation: isolate;
@@ -1089,93 +1091,151 @@ details > form,
   content: "";
   position: absolute;
   z-index: -1;
-  height: 330px;
-  width: 330px;
+  width: 480px;
+  height: 480px;
+  border: 1px solid #fff8e440;
+  box-shadow:
+    0 0 0 48px #fff8e409,
+    0 0 0 96px #fff8e408;
   border-radius: 50%;
-  background: var(--aea-yellow);
-  top: -120px;
-  right: -110px;
+  top: 24%;
+  right: -340px;
 }
 .aea-welcome::after {
   content: "";
   position: absolute;
   z-index: -1;
-  height: 240px;
-  width: 240px;
-  border-radius: 42px;
-  background: var(--aea-lilac);
-  transform: rotate(25deg);
-  bottom: -140px;
-  left: -70px;
+  inset: 0;
+  background-image:
+    linear-gradient(#ffffff06 1px, transparent 1px),
+    linear-gradient(90deg, #ffffff06 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: linear-gradient(transparent, black);
 }
-.welcome-brand {
+.welcome-office {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 20px;
+  padding-bottom: 26px;
+  border-bottom: 1px solid #ffffff40;
 }
-.welcome-brand .aea-logo {
-  width: 150px;
-  border-radius: 11px;
-  background: white;
-  padding: 7px;
+.office-mascots {
+  flex: 0 0 auto;
 }
-.welcome-brand > span {
+.office-mascots img {
+  width: 72px;
+  height: 72px;
+}
+.office-mascots img + img {
+  margin-left: -20px;
+}
+.welcome-office > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.office-label {
   font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 1.4px;
-  max-width: 160px;
-  color: #122b50;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-weight: 700;
+}
+.welcome-office strong {
+  font-size: clamp(18px, 1.7vw, 25px);
+  font-weight: 600;
+  line-height: 1.2;
+}
+.office-association {
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  color: #e2ecff;
 }
 .welcome-message {
-  margin: 60px 0;
-}
-.welcome-kicker {
-  display: inline-block;
-  background: var(--aea-yellow);
-  border-radius: 6px;
-  padding: 5px 10px;
-  font-size: 11px;
-  font-weight: 900;
-  transform: rotate(-2deg);
+  margin: 48px 0;
 }
 .welcome-message h2 {
+  color: #fff8e4;
   font-family: "League Gothic", sans-serif;
-  font-size: clamp(72px, 8vw, 112px);
+  font-size: clamp(76px, 7.6vw, 124px);
   font-weight: 400;
-  line-height: 0.98;
-  margin: 24px 0;
-  letter-spacing: -0.5px;
+  line-height: 0.96;
+  margin: 0 0 30px;
+  letter-spacing: -0.8px;
 }
 .welcome-message h2 em {
   font-style: normal;
-  color: #fff5d4;
+  color: #ffdf87;
+  position: relative;
+  display: inline-block;
+}
+.welcome-message h2 em::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: -8%;
+  bottom: -3px;
+  height: 5px;
+  background: #ff850c;
+  transform: rotate(-3deg);
+  border-radius: 50%;
+}
+.welcome-with {
+  font-size: 0.72em;
+}
+.welcome-with > span {
+  color: #fff8e4;
 }
 .welcome-message p {
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1.7;
-  color: #122b50;
+  color: #e2ecff;
+  max-width: 330px;
   margin: 0;
 }
 .welcome-bottom {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  gap: 10px;
+  align-items: flex-end;
+  gap: 16px;
 }
-.welcome-bottom > span:first-child {
-  color: #122b50;
-  font-size: 12px;
+.welcome-signature {
+  font-size: 11px;
   font-weight: 700;
+  line-height: 1.7;
 }
-.welcome-bottom .aea-mascots {
-  background: #ffffff24;
-  border: 1px solid #ffffff33;
-  border-radius: 16px;
-  padding: 0 8px;
+.welcome-signature > span {
+  display: block;
+  color: #d4e3ff;
+  font-weight: 400;
 }
-.welcome-bottom .aea-mascots img {
-  width: 110px;
-  height: 110px;
+.welcome-growth {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 90px;
+  position: relative;
+  padding-right: 28px;
+}
+.welcome-growth i {
+  width: 25px;
+  border-radius: 6px 6px 0 0;
+  background: #fff8e430;
+  height: 30%;
+}
+.welcome-growth i:nth-child(2) {
+  height: 55%;
+  background: #ffdf87;
+}
+.welcome-growth i:nth-child(3) {
+  height: 80%;
+  background: #ff850c;
+}
+.welcome-growth > span {
+  position: absolute;
+  right: 0;
+  top: -8px;
+  font-size: 40px;
+  color: #ffdf87;
 }
 
 @media (max-width: 1200px) {
@@ -1334,11 +1394,15 @@ details > form,
     border-radius: 17px;
     padding: 24px;
   }
-  .welcome-brand > span {
-    font-size: 9px;
+  .welcome-office {
+    gap: 14px;
   }
-  .welcome-brand .aea-logo {
-    width: 120px;
+  .office-mascots img {
+    width: 44px;
+    height: 44px;
+  }
+  .office-mascots img + img {
+    margin-left: -12px;
   }
   .welcome-message h2 {
     font-size: 65px;
